@@ -120,25 +120,24 @@ const AgentManagement = () => {
                                         <MapPin size={16} className="text-slate-400" />
                                         {agent.territory || 'Unassigned'}
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <FileText size={16} className="text-slate-400" />
-                                        CNIC: {agent.cnic || 'N/A'}
-                                    </div>
+                                    {/* Documents Preview Link */}
+                                {agent.residential_letter ? (
+    <div className="flex items-center gap-2 mt-2">
+        <a
+            href={getImageUrl(agent.residential_letter)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg transition-colors"
+        >
+            <FileText size={14} /> View Residential Letter
+        </a>
+    </div>
+) : (
+    <div className="text-sm text-slate-500 mt-2">Residential Letter: N/A</div>
+)}
                                 </div>
 
-                                {/* Documents Preview Link */}
-                                {agent.cnic_document && (
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <a
-                                            href={getImageUrl(agent.cnic_document)}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg transition-colors"
-                                        >
-                                            <FileText size={14} /> View CNIC Document
-                                        </a>
-                                    </div>
-                                )}
+                               
                             </div>
 
                             {/* Actions */}

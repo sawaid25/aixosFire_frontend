@@ -5,8 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 import QRCode from 'qrcode';
 import {
     Plus, Trash, Save, ArrowLeft, Building, FireExtinguisher, FileText,
-    Search, Check, AlertTriangle, ArrowRight, UserPlus, MapPin, Camera, Image, Mic, Square
+    Search, Check, AlertTriangle, ArrowRight, UserPlus, MapPin, Camera, Image, Mic, Square,
+    EyeOff,
+    Eye
 } from 'lucide-react';
+import bcrypt from 'bcryptjs';
 
 const VisitForm = () => {
     const { user } = useAuth();
@@ -16,15 +19,82 @@ const VisitForm = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [voiceNoteSizeWarning, setVoiceNoteSizeWarning] = useState('');
+    const [audioChunks, setAudioChunks] = useState([]);     // ← NEW: chunks store karenge
     const [searchResults, setSearchResults] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isNewCustomer, setIsNewCustomer] = useState(false);
+    const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
+
+    // Component ke top pe add karo (useState se pehle)
+const ADDON_PRICES = {
+  firefightingSystem: {
+    'Sprinklers': 250,                // per head/unit approx
+    'Gate Valves': 500,
+    'Pipes': 800,                     // per section rough
+    'Zone Control Valves': 1800,
+    'Hydrants': 3500,
+    'Hose Reels': 1500,
+    'Foam System': 5000,
+    '': 0
+  },
+  fireAlarmSystem: {
+    'Manual Pull Stations': 200,
+    'Smoke Detectors': 150,
+    'Heat Detectors': 220,
+    'Notification Appliances (Horns/Strobes)': 400,
+    'Control Panel': 5000,            // basic panel
+    'Voice Evacuation System': 10000,
+    'Beam Detectors': 6000,
+    '': 0
+  },
+  pumpType: {
+    'Electric Fire Pump': 25000,      // small/medium
+    'Diesel Fire Pump': 40000,
+    'Jockey Pump': 6000,
+    'Centrifugal Pump': 15000,
+    'Vertical Turbine Pump': 30000,
+    'Booster Pump': 12000,
+    '': 0
+  }
+};
+
+const FIRE_SYSTEMS = {
+  firefighting: [
+    { name: 'Sprinklers', price: 250 },
+    { name: 'Gate Valves', price: 500 },
+    { name: 'Pipes', price: 800 },
+    { name: 'Zone Control Valves', price: 1800 },
+    { name: 'Hydrants', price: 3500 },
+    { name: 'Hose Reels', price: 1500 },
+    { name: 'Foam System', price: 5000 }
+  ],
+  fireAlarm: [
+    { name: 'Manual Pull Stations', price: 200 },
+    { name: 'Smoke Detectors', price: 150 },
+    { name: 'Heat Detectors', price: 220 },
+    { name: 'Notification Appliances (Horns/Strobes)', price: 400 },
+    { name: 'Control Panel', price: 5000 },
+    { name: 'Voice Evacuation System', price: 10000 },
+    { name: 'Beam Detectors', price: 6000 }
+  ],
+  pumps: [
+    { name: 'Electric Fire Pump', price: 25000 },
+    { name: 'Diesel Fire Pump', price: 40000 },
+    { name: 'Jockey Pump', price: 6000 },
+    { name: 'Centrifugal Pump', price: 15000 },
+    { name: 'Vertical Turbine Pump', price: 30000 },
+    { name: 'Booster Pump', price: 12000 }
+  ]
+};
     // Form Data
     const [formData, setFormData] = useState({
         customerId: null,
-        businessName: '', ownerName: '', phone: '', email: '',
+        businessName: '', ownerName: '', phone: '', email: '', password: '',
         address: '', businessType: 'Retail Store - Grocery',
+        customBusinessType: '',
         notes: '', riskAssessment: '', serviceRecommendations: '',
         followUpDate: '',
         customerPhoto: null,
@@ -36,12 +106,17 @@ const VisitForm = () => {
     const [extinguishers, setExtinguishers] = useState([
         {
             mode: 'Validation', // Validation, Refill, New Unit
-            type: 'ABC Dry Powder', capacity: '6kg', quantity: 1,
-            brand: '', seller: '', partner: '', refillStatus: 'Required',
-            price: 180, expiryDate: '', condition: 'Good'
+            type: 'ABC Dry Powder', customType: '', capacity: '6kg', quantity: 1,
+            systemItem: '',
+            brand: '', seller: '', partner: '', customPartner: '', refillStatus: 'Required',
+            price: 180, expiryDate: '', condition: 'Good',
+            firefightingSystem: '',
+            fireAlarmSystem: '',
+            pumpType: '',
         }
     ]);
 
+    
     // Handlers
     const handleSearch = async (query) => {
         setSearchQuery(query);
@@ -61,6 +136,48 @@ const VisitForm = () => {
         }
     };
 
+    // VisitForm ke andar, handlers ke paas add kar do
+const uploadCustomerPhoto = async (file) => {
+  if (!file) return null;
+
+  try {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    // Unique name: timestamp + random + original ext
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+    const filePath = `customer-photos/${fileName}`;  // folder bana diya better organization ke liye
+
+    const { error: uploadError } = await supabase.storage
+      .from('customer-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,          // overwrite na ho
+      });
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      alert('Photo upload failed: ' + uploadError.message);
+      return null;
+    }
+
+    // Public URL nikaal lo (bucket public hona zaroori)
+    const { data: urlData } = supabase.storage
+      .from('customer-images')
+      .getPublicUrl(filePath);
+
+    if (!urlData?.publicUrl) {
+      console.warn('No public URL returned');
+      return null;
+    }
+
+    console.log('Uploaded photo URL:', urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error('Photo upload exception:', err);
+    alert('Unexpected error during photo upload');
+    return null;
+  }
+};
+
     const selectCustomer = (cust) => {
         setFormData({
             ...formData,
@@ -76,36 +193,126 @@ const VisitForm = () => {
         setIsNewCustomer(false);
     };
 
-    const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    
 
-    const handleExtinguisherChange = (index, field, value) => {
-        const newExt = [...extinguishers];
-        newExt[index][field] = value;
-        // Default price for New Unit
-        if (field === 'mode' && value === 'New Unit') {
-            newExt[index].price = 180;
+    const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => {
+        const newData = { ...prev, [name]: value };
+        
+        if (name === 'businessType' && value !== 'Other') {
+            newData.customBusinessType = '';
         }
-        setExtinguishers(newExt);
-    };
+        return newData;
+    });
+};
+    const handleExtinguisherChange = (index, field, value) => {
+  setExtinguishers(prev =>
+    prev.map((item, i) => {
+      if (i !== index) return item;
+
+      const updated = { ...item, [field]: value };
+
+      // Existing logic (type, partner etc.)
+      if (field === 'type' && value !== 'Other') updated.customType = '';
+      if (field === 'partner' && value !== 'Other') updated.customPartner = '';
+      
+      if (field === 'mode' && value === 'New Unit') {
+        updated.price = 180; // reset to base
+      }
+
+      // New Unit mode mein price update
+      if (updated.mode === 'New Unit' && 
+          ['firefightingSystem', 'fireAlarmSystem', 'pumpType', 'mode'].includes(field)) {
+        
+        const base = 180;
+        
+        // Find price from the data object
+        const ffItem = FIRE_SYSTEMS.firefighting.find(it => it.name === updated.firefightingSystem);
+        const faItem  = FIRE_SYSTEMS.fireAlarm.find(it => it.name === updated.fireAlarmSystem);
+        const pumpItem = FIRE_SYSTEMS.pumps.find(it => it.name === updated.pumpType);
+
+        const ffPrice = ffItem ? ffItem.price : 0;
+        const faPrice  = faItem  ? faItem.price  : 0;
+        const pumpPrice = pumpItem ? pumpItem.price : 0;
+
+        updated.price = base + ffPrice + faPrice + pumpPrice;
+      }
+
+      return updated;
+    })
+  );
+};
+
 
     const addExtinguisher = () => {
         setExtinguishers([...extinguishers, {
             mode: 'Validation',
-            type: 'ABC Dry Powder', capacity: '6kg', quantity: 1,
-            brand: '', seller: '', partner: '', refillStatus: 'Required',
-            price: 180, expiryDate: '', condition: 'Good'
+            type: 'ABC Dry Powder', customType:'', capacity: '6kg', quantity: 1,
+            brand: '', seller: '', partner: '', customPartner: '', refillStatus: 'Required',
+            price: 180, expiryDate: '', condition: 'Good',
+            firefightingSystem: '',
+            fireAlarmSystem: '',
+            pumpType: '',
         }]);
     };
 
-    const fetchLocation = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                const { latitude, longitude } = position.coords;
-                setFormData(prev => ({ ...prev, address: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}` }));
-            }, (err) => {
-                alert("Failed to get location: " + err.message);
-            });
+    const fetchLocation = async () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser. Please enter address manually.");
+            return;
         }
+
+        setIsFetchingLocation(true); // ← Loading start
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+
+                try {
+                    const response = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+                    );
+
+                    if (!response.ok) {
+                        throw new Error("Failed to fetch address");
+                    }
+
+                    const data = await response.json();
+
+                    let readableAddress = data.display_name || 
+                        `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`;
+
+                    setFormData(prev => ({ ...prev, address: readableAddress }));
+                } catch (err) {
+                    console.error("Reverse geocoding error:", err);
+                    setFormData(prev => ({
+                        ...prev,
+                        address: `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)} (couldn't get full address)`
+                    }));
+                    alert("Couldn't fetch readable address. Using coordinates instead.");
+                } finally {
+                    setIsFetchingLocation(false); // ← Loading end (success ya fail dono mein)
+                }
+            },
+            (err) => {
+                setIsFetchingLocation(false); // ← Loading end
+
+                let errorMsg = "Failed to get location.";
+                
+                if (err.code === err.PERMISSION_DENIED) {
+                    errorMsg = "Location access denied. Please enable location permission in browser settings and try again.";
+                } else if (err.code === err.POSITION_UNAVAILABLE) {
+                    errorMsg = "Location information is unavailable. Make sure GPS/location is turned ON on your device.";
+                } else if (err.code === err.TIMEOUT) {
+                    errorMsg = "Location request timed out. Please try again.";
+                }
+
+                alert(errorMsg);
+                setFormData(prev => ({ ...prev, address: prev.address || "Enable location to auto-fill" }));
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
     };
 
     const handlePhotoUpload = (e) => {
@@ -128,21 +335,43 @@ const VisitForm = () => {
         } catch (err) { console.error(err); }
     };
 
+    const MAX_VOICE_NOTE_SIZE = 256000; // bytes
+
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
             let chunks = [];
-            recorder.ondataavailable = (e) => chunks.push(e.data);
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/wav' });
-                setFormData(prev => ({ ...prev, voiceNote: blob }));
+
+            recorder.ondataavailable = (e) => {
+                chunks.push(e.data);
+                setAudioChunks([...chunks]);
             };
+
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const sizeInKB = (blob.size / 1024).toFixed(1);
+
+                if (blob.size > MAX_VOICE_NOTE_SIZE) {
+                    setVoiceNoteSizeWarning(
+                        `Voice note too large (${sizeInKB} KB) — Max allowed: 250 KB. Please try a shorter recording.`
+                    );
+                    setFormData(prev => ({ ...prev, voiceNote: null }));
+                } else {
+                    setVoiceNoteSizeWarning('');
+                    setFormData(prev => ({ ...prev, voiceNote: blob }));
+                }
+
+                chunks = [];
+                setAudioChunks([]);
+            };
+
             recorder.start();
             setMediaRecorder(recorder);
             setIsRecording(true);
             setRecordingTime(0);
-        } catch (err) { alert("Mic access denied"); }
+            setVoiceNoteSizeWarning('');
+        } catch (err) { alert("Mic access denied: " + err.message); }
     };
 
     const stopRecording = () => {
@@ -152,38 +381,91 @@ const VisitForm = () => {
         }
     };
 
+    useEffect(() => {
+        let interval;
+        if (isRecording) {
+            interval = setInterval(() => {
+                setRecordingTime(prev => prev + 1);
+            }, 1000);
+        }
+        return () => {
+            clearInterval(interval);
+            if (!isRecording) setRecordingTime(0);
+        };
+    }, [isRecording]);
+
+    const removeExtinguisher = (index) => {
+  setExtinguishers(prev =>
+    prev.filter((_, i) => i !== index)
+  );
+};
+
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
             let finalCustId = formData.customerId;
             let finalQrUrl = null;
 
+            
+    let finalBusinessType = formData.businessType;
+
+    if (formData.businessType === 'Other') {
+        if (formData.customBusinessType.trim()) {
+            finalBusinessType = formData.customBusinessType.trim();
+        } else {
+            finalBusinessType = 'Other';   // agar blank chhoda to sirf "Other" save ho
+        }
+    }
             // 1. Handle New Lead Customer
             if (!finalCustId) {
-                // ... logic to create customer and get ID
+            let imageUrl = null;
+
+            // Pehle photo upload try karo (agar file select ki hai)
+            if (formData.customerPhoto) {
+                imageUrl = await uploadCustomerPhoto(formData.customerPhoto);
+            }
+
+            let finalBusinessType = formData.businessType;
+
+            if (formData.businessType === 'Other') {
+                if (formData.customBusinessType.trim()) {
+                finalBusinessType = formData.customBusinessType.trim();
+                } else {
+                finalBusinessType = 'Other';
+                }
+            }
+                
+            const hashedPassword = bcrypt.hashSync(formData.password, 8);
+
+
                 const { data: leadData, error: leadError } = await supabase
                     .from('customers')
                     .insert([{
                         business_name: formData.businessName,
-                        owner_name: formData.ownerName,
+                        owner_name: formData.ownerName || null,
                         email: formData.email || `lead-${Date.now()}@temp.com`,
-                        password: 'default-hashed-placeholder',
-                        phone: formData.phone,
-                        address: formData.address,
-                        business_type: formData.businessType,
-                        status: 'Lead'
+                        password: hashedPassword,
+                        phone: formData.phone || null,
+                        address: formData.address || null,
+                        business_type: finalBusinessType,
+                        status: 'Lead',
+                        image_url: imageUrl,           // ← yahan URL save ho jayega
                     }])
                     .select();
 
                 if (leadError) throw leadError;
+
                 finalCustId = leadData[0].id;
 
-                // QR Logic
+                // QR Logic (same as before)
                 try {
                     const qrContent = JSON.stringify({ id: finalCustId, type: 'customer', name: formData.businessName });
                     finalQrUrl = await QRCode.toDataURL(qrContent);
                     await supabase.from('customers').update({ qr_code_url: finalQrUrl }).eq('id', finalCustId);
-                } catch (qrErr) { console.error(qrErr); }
+                } catch (qrErr) {
+                    console.error('QR generation/update failed:', qrErr);
+                }
             }
 
             // 2. Handle File Uploads (Photo & Voice Note)
@@ -199,7 +481,7 @@ const VisitForm = () => {
                     agent_id: user.id,
                     customer_id: finalCustId,
                     customer_name: formData.businessName,
-                    business_type: formData.businessType,
+                    business_type: finalBusinessType,
                     notes: formData.notes,
                     risk_assessment: formData.riskAssessment,
                     service_recommendations: formData.serviceRecommendations,
@@ -226,7 +508,10 @@ const VisitForm = () => {
                     brand: item.brand,
                     seller: item.seller,
                     partner: item.partner,
-                    price: item.price
+                    price: item.price,
+                    firefighting_system: item.firefightingSystem || null,
+    fire_alarm_system: item.fireAlarmSystem || null,
+    pump_type: item.pumpType || null,
                 }));
 
                 const { error: invError } = await supabase.from('extinguishers').insert(inventoryRows);
@@ -333,15 +618,42 @@ const VisitForm = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <Input label="Business Name" name="businessName" value={formData.businessName} onChange={handleInputChange} required={isNewCustomer} />
                                 <Input label="Owner Name" name="ownerName" value={formData.ownerName} onChange={handleInputChange} />
-                                <Input label="Phone Contact" name="phone" value={formData.phone} onChange={handleInputChange} required={isNewCustomer} />
-                                <Input label="Email Address" name="email" value={formData.email} onChange={handleInputChange} />
-                                <div className="md:col-span-2 relative">
-                                    <Input label="Site Address" name="address" value={formData.address} onChange={handleInputChange} />
-                                    <button onClick={fetchLocation} className="absolute right-2 top-8 p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors" title="Get Current Location">
-                                        <MapPin size={20} />
-                                    </button>
+                                <Input label="Phone Contact" name="phone" type='number' value={formData.phone} onChange={handleInputChange} required={isNewCustomer} />
+                                <Input label="Email Address" name="email" type='email' value={formData.email} onChange={handleInputChange} />
+                                <div className="relative w-full">
+                                <Input label="Password" name="password" type={showPassword ? "text" : "password"} value={formData.password} onChange={handleInputChange} required={isNewCustomer} placeholder="Customer login password" />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-[38px] text-gray-500"
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </button>
                                 </div>
-                                <div className="md:col-span-2">
+                                <div className="md:col-span-1 relative">
+    <Input 
+        label="Site Address" 
+        name="address" 
+        value={formData.address} 
+        onChange={handleInputChange} 
+        placeholder={isFetchingLocation ? "Fetching location..." : "Enter site address or use button"}
+        disabled={isFetchingLocation} 
+    />
+    <button 
+        onClick={fetchLocation} 
+        disabled={isFetchingLocation}
+        className={`absolute right-2 top-8 p-2 rounded-lg transition-colors ${isFetchingLocation ? 'text-gray-400 cursor-wait' : 'text-primary-600 hover:bg-primary-50'}`}
+        title="Get Current Location"
+    >
+        {isFetchingLocation ? (
+            <div className="animate-spin h-5 w-5 border-2 border-primary-500 border-t-transparent rounded-full" />
+        ) : (
+            <MapPin size={20} />
+        )}
+    </button>
+</div>
+                                <div className="md:col-span-2 space-y-4">
+                                <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Business Category</label>
                                     <select name="businessType" value={formData.businessType} onChange={handleInputChange} className="input-field">
                                         <optgroup label="Retail Store">
@@ -356,11 +668,30 @@ const VisitForm = () => {
                                         <option>Industrial Factory</option>
                                         <option>Warehouse</option>
                                         <option>Educational Institute</option>
+                                        <option>Other</option>   {/* ← yeh add kar diya */}
                                     </select>
+                                </div>
+
+                                {formData.businessType === 'Other' && (
+                                    <div className="animate-fade-in pl-1">
+                                        <label className="block text-sm font-medium text-slate-600 mb-1">
+                                            Specify business type
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="customBusinessType"
+                                            value={formData.customBusinessType}
+                                            onChange={handleInputChange}
+                                            placeholder="e.g. Beauty Salon, Car Wash, Gym, etc."
+                                            className="input-field"
+                                            required   // agar chaaho to required rakh sakte ho
+                                        />
+                                    </div>
+                                )}
                                 </div>
                                 <div className="md:col-span-2 grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer Image</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer Image (clear image of client office space/building)</label>
                                         <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center hover:border-primary-500 hover:bg-primary-50/10 transition-all cursor-pointer">
                                             <input type="file" onChange={handlePhotoUpload} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
                                             {formData.customerPhoto ? (
@@ -417,21 +748,18 @@ const VisitForm = () => {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 pb-4 border-b border-slate-200/50">
-                                    <div className="md:col-span-2">
-                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Task Mode</label>
-                                        <div className="flex gap-2">
-                                            {['Validation', 'Refill', 'New Unit'].map(m => (
-                                                <button
-                                                    key={m}
-                                                    onClick={() => handleExtinguisherChange(index, 'mode', m)}
-                                                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${ext.mode === m ? 'bg-primary-500 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
+                                <div className="grid grid-cols-4 gap-2 mb-4 pb-4 border-b border-slate-200/50">
+                                            {['Validation', 'Refill', 'New Unit', 'Maintenance'].map((m, modeIndex) => (
+                                            <button
+                                                key={m}
+                                                onClick={() => handleExtinguisherChange(index, 'mode', m)}
+                                                    className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${ext.mode === m ? 'bg-primary-500 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
                                                 >
                                                     {m}
                                                 </button>
                                             ))}
                                         </div>
-                                    </div>
+                                    <div className='grid grid-cols-1 md:grid-cols-2 gap-4 pb-4'>
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Type</label>
                                         <select value={ext.type} onChange={(e) => handleExtinguisherChange(index, 'type', e.target.value)} className="input-field py-2 text-sm">
@@ -440,8 +768,25 @@ const VisitForm = () => {
                                             <option>Water Type</option>
                                             <option>Mechanical Foam</option>
                                             <option>Wet Chemical</option>
+                                            <option>Other</option>           {/* ← yeh add karo */}
                                         </select>
+
+                                {ext.type === 'Other' && (
+                                    <div className="mt-3 animate-fade-in">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                                            Specify Type
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={ext.customType || ''}
+                                            onChange={(e) => handleExtinguisherChange(index, 'customType', e.target.value)}
+                                            placeholder="e.g. Clean Agent, Dry Chemical Special, etc."
+                                            className="input-field py-2 text-sm"
+                                        />
                                     </div>
+                                )}
+                            </div>
+
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Capacity</label>
                                         <select value={ext.capacity} onChange={(e) => handleExtinguisherChange(index, 'capacity', e.target.value)} className="input-field py-2 text-sm">
@@ -472,46 +817,163 @@ const VisitForm = () => {
                                     )}
 
                                     {ext.mode === 'New Unit' && (
-                                        <>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Seller</label>
-                                                <input value={ext.seller} onChange={(e) => handleExtinguisherChange(index, 'seller', e.target.value)} className="input-field py-2 text-sm" placeholder="Seller Name" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Brand</label>
-                                                <input value={ext.brand} onChange={(e) => handleExtinguisherChange(index, 'brand', e.target.value)} className="input-field py-2 text-sm" placeholder="Brand Name" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
-                                                <input type="number" value={ext.quantity} onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value))} className="input-field py-2 text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Price (SAR)</label>
-                                                <input type="number" value={ext.price} onChange={(e) => handleExtinguisherChange(index, 'price', parseInt(e.target.value))} className="input-field py-2 text-sm" />
-                                            </div>
-                                        </>
-                                    )}
+    <>
+    
+    <div className='col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4'>
+
+        <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Seller</label>
+            <input value={ext.seller} onChange={(e) => handleExtinguisherChange(index, 'seller', e.target.value)} className="input-field py-2 text-sm" placeholder="Seller Name" />
+        </div>
+        <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Brand</label>
+            <input value={ext.brand} onChange={(e) => handleExtinguisherChange(index, 'brand', e.target.value)} className="input-field py-2 text-sm" placeholder="Brand Name" />
+        </div>
+        <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
+            <input type="number" value={ext.quantity} onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value) || 1)} className="input-field py-2 text-sm" />
+        </div>
+            </div>
+        {/* <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Price (SAR)</label>
+            <div className='text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0]'>{ext.price}</div>
+        </div> */}
+
+        <div className="col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  {/* Fire Fighting System */}
+  <div>
+    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+      Fire Fighting System
+    </label>
+    <select
+      value={ext.firefightingSystem || ''}
+      onChange={(e) => handleExtinguisherChange(index, 'firefightingSystem', e.target.value)}
+      className="input-field py-2 text-sm"
+    >
+      <option value="">Select...</option>
+      {FIRE_SYSTEMS.firefighting.map((item) => (
+        <option key={item.name} value={item.name}>
+        {item.name} - SAR {item.price.toLocaleString()}
+      </option>
+      ))}
+    </select>
+  </div>
+
+  {/* Fire Alarm System */}
+  <div>
+    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+      Fire Alarm System
+    </label>
+    <select
+      value={ext.fireAlarmSystem || ''}
+      onChange={(e) => handleExtinguisherChange(index, 'fireAlarmSystem', e.target.value)}
+      className="input-field py-2 text-sm"
+    >
+      <option value="">Select...</option>
+      {FIRE_SYSTEMS.fireAlarm.map((item) => (
+        <option key={item.name} value={item.name}>
+        {item.name} - SAR {item.price.toLocaleString()}
+      </option>
+      ))}
+    </select>
+  </div>
+
+  {/* Pump Type */}
+  <div>
+    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+      Pump Type
+    </label>
+    <select
+      value={ext.pumpType || ''}
+      onChange={(e) => handleExtinguisherChange(index, 'pumpType', e.target.value)}
+      className="input-field py-2 text-sm"
+    >
+      <option value="">Select...</option>
+      {FIRE_SYSTEMS.pumps.map((item) => (
+        <option key={item.name} value={item.name}>
+        {item.name} - SAR {item.price.toLocaleString()}
+      </option>
+      ))}
+    </select>
+  </div>
+</div>
+        <div className="col-span-4 mt-6 pt-4 border-t border-slate-200 grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Base Price</label>
+        <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+          SAR 180
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Fire Fighting Add-on</label>
+        {/* <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+          SAR {ADDON_PRICES.firefightingSystem[ext.firefightingSystem || ''] || 0}
+        </div> */}
+        <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+        SAR {FIRE_SYSTEMS.firefighting.find(it => it.name === ext.firefightingSystem)?.price || 0}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Fire Alarm Add-on</label>
+        {/* <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+          SAR {ADDON_PRICES.fireAlarmSystem[ext.fireAlarmSystem || ''] || 0}
+        </div> */}
+        <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+        SAR {FIRE_SYSTEMS.fireAlarm.find(it => it.name === ext.fireAlarmSystem)?.price || 0}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Pump Add-on</label>
+        <div className="text-sm font-medium text-slate-700 bg-white border rounded-xl p-3 border-[#e2e8f0] text-center">
+        SAR {FIRE_SYSTEMS.pumps.find(it => it.name === ext.pumpType)?.price || 0}
+        </div>
+      </div>
+      <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+        <label className="text-xs font-bold text-green-800 uppercase tracking-wider mb-1 block">Final Price (SAR)</label>
+        <div className="text-xl font-bold text-green-700">
+          SAR {ext.price}
+        </div>
+      </div>
+    </div>
+
+    </>
+)}
 
                                     {ext.mode === 'Refill' && (
                                         <>
                                             <div>
                                                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
-                                                <input value={ext.partner} onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)} className="input-field py-2 text-sm" placeholder="Service Partner" />
+                                                {/* <input value={ext.partner} onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)} className="input-field py-2 text-sm" placeholder="Service Partner" /> */}
+                                                <select
+                value={ext.partner}
+                onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
+                className="input-field py-2 text-sm"
+            >
+                <option value="">Select Partner</option>
+                <option>FireShield Services</option>
+                <option>SafetyFirst Refilling</option>
+                <option>Al-Faisal Fire Equipment</option>
+                <option>Guardian Fire Solutions</option>
+                <option>United Fire Protection</option>
+                <option>Other</option>
+            </select>
+
+            {ext.partner === 'Other' && (
+                <div className="mt-3 animate-fade-in">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                        Specify Partner Name
+                    </label>
+                    <input
+                        type="text"
+                        value={ext.customPartner || ''}
+                        onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+                        placeholder="e.g. ABC Fire Refilling Co."
+                        className="input-field py-2 text-sm"
+                    />
+                </div>
+            )}
                                             </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Brand</label>
-                                                <input value={ext.brand} onChange={(e) => handleExtinguisherChange(index, 'brand', e.target.value)} className="input-field py-2 text-sm" placeholder="Brand" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Refill Status</label>
-                                                <select value={ext.refillStatus} onChange={(e) => handleExtinguisherChange(index, 'refillStatus', e.target.value)} className="input-field py-2 text-sm">
-                                                    <option>Required</option><option>In Process</option><option>Completed</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
-                                                <input type="number" value={ext.quantity} onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value))} className="input-field py-2 text-sm" />
-                                            </div>
+                                            
                                         </>
                                     )}
                                 </div>
@@ -541,23 +1003,49 @@ const VisitForm = () => {
 
                     <div className="space-y-6">
                         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                            <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Site Voice Note</label>
-                            <div className="flex items-center gap-4">
+                            <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">
+                                Site Voice Note (max 250 KB)
+                            </label>
+
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                 <button
                                     onMouseDown={startRecording}
                                     onMouseUp={stopRecording}
                                     onTouchStart={startRecording}
                                     onTouchEnd={stopRecording}
-                                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 animate-pulse text-white scale-110 shadow-lg shadow-red-500/30' : 'bg-white text-slate-400 border-2 border-slate-200 hover:border-primary-500 hover:text-primary-500'}`}
+                                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${isRecording ? 'bg-red-500 animate-pulse text-white scale-110 shadow-lg shadow-red-500/30' : 'bg-white text-slate-400 border-2 border-slate-200 hover:border-primary-500 hover:text-primary-500'}`}
                                 >
                                     {isRecording ? <Square size={24} /> : <Mic size={24} />}
                                 </button>
-                                <div>
-                                    <p className="font-bold text-slate-900">{isRecording ? 'Recording...' : formData.voiceNote ? 'Voice Note Captured' : 'Hold to Record'}</p>
-                                    <p className="text-sm text-slate-500">Tap and hold to record site assessment feedback.</p>
+                                <div className="flex-1">
+                                    <p className="font-bold text-slate-900">{isRecording ? `Recording... ${recordingTime}s` : formData.voiceNote ? 'Voice Note Captured' : 'Hold to Record'}</p>
+                                    <p className="text-sm text-slate-500 mt-1">
+                                        Max allowed size: <strong>250 KB</strong> • Record shorter if warning appears
+                                    </p>
+
+                                    {voiceNoteSizeWarning && (
+                                        <p className="text-sm text-red-600 mt-2 font-medium flex items-center gap-2">
+                                            <AlertTriangle size={16} /> {voiceNoteSizeWarning}
+                                        </p>
+                                    )}
                                 </div>
                                 {formData.voiceNote && !isRecording && (
-                                    <audio src={URL.createObjectURL(formData.voiceNote)} controls className="h-8 ml-auto" />
+                                    <div className="flex items-center gap-3 mt-3 sm:mt-0">
+                                        <audio
+                                            src={URL.createObjectURL(formData.voiceNote)}
+                                            controls
+                                            className="h-8 w-48"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                setFormData(prev => ({ ...prev, voiceNote: null }));
+                                                setVoiceNoteSizeWarning('');
+                                            }}
+                                            className="text-red-500 hover:text-red-700 text-sm font-medium flex items-center gap-1"
+                                        >
+                                            <Trash size={14} /> Remove
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -608,10 +1096,10 @@ const VisitForm = () => {
     );
 };
 
-const Input = ({ label, name, value, onChange, placeholder, required = false }) => (
+const Input = ({ label, name, value, onChange, placeholder, required = false, type = "text" }) => (
     <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-        <input name={name} value={value} onChange={onChange} required={required} placeholder={placeholder} className="input-field" />
+        <input name={name} value={value} onChange={onChange} required={required} placeholder={placeholder} type={type}                className="input-field" />
     </div>
 );
 

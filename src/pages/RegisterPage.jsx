@@ -10,21 +10,27 @@ const RegisterPage = () => {
 
     // Form Data State
     const [formData, setFormData] = useState({
-        name: '', email: '', password: '',
-        phoneLocal: '', // 9 Digits
-        cnic: '', territory: 'Retail',
-        business_name: '', owner_name: '', address: '', business_type: 'Retail',
+        name: '',
+        email: '',
+        password: '',
+        phoneLocal: '',
+        territory: 'North Zone',
+        business_name: '',
+        owner_name: '',
+        address: '',
+        business_type: 'Retail',
         terms_accepted: false
     });
+
 
     const [countryCode, setCountryCode] = useState('+92'); // Default fallback
     const [loadingIp, setLoadingIp] = useState(true);
 
     // Separate state for files
     const [files, setFiles] = useState({
-        profile_photo: null,
-        cnic_document: null
-    });
+    profile_photo: null,
+    residential_letter: null,
+});
 
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -80,19 +86,19 @@ const RegisterPage = () => {
             const isAgent = role === 'agent';
 
             if (isAgent) {
-                // Use FormData for Agent (File Uploads)
-                const formDataObj = new FormData();
-                Object.keys(baseData).forEach(key => {
-                    formDataObj.append(key, baseData[key]);
-                });
-                if (files.profile_photo) formDataObj.append('profile_photo', files.profile_photo);
-                if (files.cnic_document) formDataObj.append('cnic_document', files.cnic_document);
+    const formDataObj = new FormData();
+    Object.keys(baseData).forEach(key => {
+        formDataObj.append(key, baseData[key]);
+    });
 
-                dataToSend = formDataObj;
-            } else {
-                // Use JSON for Customer
-                dataToSend = baseData;
-            }
+    if (files.profile_photo) formDataObj.append('profile_photo', files.profile_photo);
+    if (files.residential_letter) formDataObj.append('residential_letter', files.residential_letter); // new
+
+    dataToSend = formDataObj;
+} else {
+    dataToSend = baseData;
+}
+
 
             const result = await register(role, dataToSend);
             if (result.success) {
@@ -185,26 +191,26 @@ const RegisterPage = () => {
                                                 />
                                             </div>
                                         </div>
-                                        <Input label="CNIC Number" name="cnic" value={formData.cnic} onChange={handleChange} required placeholder="XXXXX-XXXXXXX-X" />
+                                        <div className="col-span-1">
+    <label className="block text-sm font-medium text-slate-700 mb-1">Residential Letter</label>
+    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors h-[46px] flex items-center justify-center cursor-pointer group">
+        <input 
+            type="file" 
+            name="residential_letter" 
+            onChange={handleChange} 
+            accept="image/*" 
+            className="absolute inset-0 opacity-0 cursor-pointer" 
+            required 
+        />
+        {files.residential_letter ? (
+            <img src={URL.createObjectURL(files.residential_letter)} alt="Preview" className="h-full w-full object-cover" />
+        ) : (
+            <Upload size={18} className="text-slate-400 group-hover:text-primary-500" />
+        )}
+    </div>
+</div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Upload CNIC (Front)</label>
-                                        <div className="relative block w-full rounded-xl border-dashed border-2 border-slate-300 p-4 text-center hover:border-primary-500 hover:bg-primary-50/10 transition-all cursor-pointer">
-                                            <input type="file" name="cnic_document" onChange={handleChange} accept="image/*,.pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
-                                            {files.cnic_document ? (
-                                                <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-                                                    <CheckSquare size={18} /> {files.cnic_document.name}
-                                                </div>
-                                            ) : (
-                                                <div className="text-slate-500 flex flex-col items-center">
-                                                    <FileText size={24} className="mb-2 text-slate-400" />
-                                                    <span className="text-sm">Click to upload document</span>
-                                                    <span className="text-xs text-slate-400 mt-1">JPG, PNG or PDF</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Territory Preference</label>

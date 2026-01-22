@@ -12,6 +12,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import AgentDashboard from './pages/agent/Dashboard';
 import VisitForm from './pages/agent/VisitForm';
 import Customers from './pages/agent/Customers';
+import CustomerDetails from './pages/agent/CustomerDetails';
 
 // Customer Pages
 import CustomerDashboard from './pages/customer/Dashboard';
@@ -67,6 +68,7 @@ function App() {
                   <Route path="dashboard" element={<AgentDashboard />} />
                   <Route path="visit" element={<VisitForm />} />
                   <Route path="customers" element={<Customers />} />
+                    <Route path="customer/:id" element={<CustomerDetails />} />
                   <Route path="performance" element={<div>Performance (Coming Soon)</div>} />
                 </Routes>
               </ProtectedRoute>

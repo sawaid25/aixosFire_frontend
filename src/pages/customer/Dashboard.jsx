@@ -63,6 +63,50 @@ const CustomerDashboard = () => {
     const [inventory, setInventory] = useState([]);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [userLocation, setUserLocation] = useState(null);
+
+    useEffect(() => {
+    if (!navigator.geolocation || !user) return;
+
+    let lastUpdate = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+        async (position) => {
+            const { latitude, longitude } = position.coords;
+
+            // Optional: for showing marker or debugging
+            console.log("Customer Location:", latitude, longitude);
+
+            const now = Date.now();
+            if (now - lastUpdate < 10000) return; // update every 10 seconds
+            lastUpdate = now;
+
+            try {
+                // ✅ Update customer location in Supabase
+                const { error } = await supabase
+                    .from('customers')
+                    .update({
+                        location_lat: latitude,
+                        location_lng: longitude
+                    })
+                    .eq('id', user.id); // update specific customer
+
+                if (error) {
+                    console.error('Failed to update location:', error.message);
+                } else {
+                    console.log('Customer location updated successfully');
+                }
+            } catch (err) {
+                console.error('Error updating location:', err);
+            }
+        },
+        (err) => console.error('Geolocation error:', err),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+}, [user]);
+
 
     useEffect(() => {
         const fetchData = async () => {

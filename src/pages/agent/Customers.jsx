@@ -95,9 +95,10 @@ const Customers = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50/50 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-100">
+                                    <th className="px-6 py-4">Sequence No</th>
+                                    <th className="px-6 py-4">Customer Name</th>
                                     <th className="px-6 py-4">Business</th>
                                     <th className="px-6 py-4">Location</th>
-                                    <th className="px-6 py-4">Last Visit</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4 text-right">Action</th>
                                 </tr>
@@ -105,6 +106,12 @@ const Customers = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {filteredCustomers.map((customer) => (
                                     <tr key={customer.id} className="hover:bg-slate-50 transition-colors group">
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                            {customer.id}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                           {customer.owner_name}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-slate-900">{customer.business_name}</div>
                                             <div className="text-xs text-slate-400 flex items-center gap-1">
@@ -117,9 +124,7 @@ const Customers = () => {
                                                 {customer.address || "N/A"}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : 'Never'}
-                                        </td>
+                                        
                                         <td className="px-6 py-4">
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${customer.status === 'Active' ? 'bg-green-100 text-green-700' :
                                                 customer.status === 'Lead' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
@@ -129,7 +134,7 @@ const Customers = () => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <Link
-                                                to={`/agent/visit?customerId=${customer.id}`}
+                                                to={`/agent/customer/${customer.id}`}
                                                 className="inline-flex items-center justify-center p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                                                 title="Log New Visit"
                                             >
