@@ -7,9 +7,11 @@ import {
     Plus, Trash, Save, ArrowLeft, Building, FireExtinguisher, FileText,
     Search, Check, AlertTriangle, ArrowRight, UserPlus, MapPin, Camera, Image, Mic, Square,
     EyeOff,
-    Eye
+    Eye,
+    Pencil
 } from 'lucide-react';
 import bcrypt from 'bcryptjs';
+import { useRef } from 'react';
 
 const VisitForm = () => {
     const { user } = useAuth();
@@ -28,6 +30,7 @@ const VisitForm = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [recordingIndex, setRecordingIndex] = useState(null);
     const [unitVoiceWarnings, setUnitVoiceWarnings] = useState({});
+    const debounceTimers = useRef([]);
 
     // Component ke top pe add karo (useState se pehle)
 const ADDON_PRICES = {
@@ -99,7 +102,7 @@ const FIRE_SYSTEMS = {
         notes: '', riskAssessment: '', serviceRecommendations: '',
         followUpDate: '',
         customerPhoto: null,
-        voiceNote: null
+        voiceNote: null,
     });
 
     const [qrPreview, setQrPreview] = useState(null);
@@ -118,9 +121,26 @@ const FIRE_SYSTEMS = {
             maintenanceVoiceNote: null,
             maintenanceNotes: '',
             maintenanceUnitPhoto: null,
+
+            isLocked: false,
+            hasChanges: false
         }
     ]);
 
+    useEffect(() => {
+    extinguishers.forEach((ext, index) => {
+        if (ext.mode === 'Validation' && ext.hasChanges && !ext.isLocked) {
+            if (debounceTimers.current[index]) clearTimeout(debounceTimers.current[index]);
+            debounceTimers.current[index] = setTimeout(() => {
+                setExtinguishers(prev =>
+                    prev.map((item, i) => i === index ? { ...item, isLocked: true, hasChanges: false } : item)
+                );
+                // Optional: Alert or console "Auto-saved and locked unit {index+1}"
+            }, 2000); // 2 seconds debounce
+        }
+    });
+    return () => debounceTimers.current.forEach(timer => clearTimeout(timer));
+}, [extinguishers]);
     
     // Handlers
     const handleSearch = async (query) => {
@@ -215,8 +235,8 @@ const uploadCustomerPhoto = async (file) => {
   setExtinguishers(prev =>
     prev.map((item, i) => {
       if (i !== index) return item;
-
-      const updated = { ...item, [field]: value };
+      if (item.isLocked) return item;
+      const updated = { ...item, [field]: value, hasChanges: true };
 
       if (field === 'type' && value !== 'Other') updated.customType = '';
       if (field === 'partner' && value !== 'Other') updated.customPartner = '';
@@ -261,6 +281,8 @@ const uploadCustomerPhoto = async (file) => {
             maintenanceVoiceNote: null,       // ← Add yeh
             maintenanceNotes: '',             // ← Add yeh
             maintenanceUnitPhoto: null,
+            isLocked: false,
+            hasChanges: false
         }]);
     };
 
@@ -877,27 +899,63 @@ const uploadMaintenancePhoto = async (file, index) => {
                     <div className="space-y-4 mb-8">
                         {extinguishers.map((ext, index) => (
                             <div key={index} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 hover:shadow-md transition-all relative group">
-                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                    <button onClick={() => removeExtinguisher(index)} className="p-2 bg-white text-red-500 rounded-lg shadow-sm border border-slate-200 hover:text-red-600">
-                                        <Trash size={16} />
-                                    </button>
-                                </div>
+                                <div className="absolute -top-5 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                                  {!ext.isLocked && (
+            <button
+                onClick={() => {
+                    setExtinguishers(prev =>
+                        prev.map((item, i) =>
+                            i === index ? { ...item, isLocked: true, hasChanges: false } : item
+                        )
+                    );
+                }}
+                disabled={!ext.hasChanges}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 shadow-sm transition-all ${
+                    ext.hasChanges
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+                title="Save and lock this unit"
+            >
+                <Save size={16} />
+                Save
+            </button>
+        )}
 
-                                <div className="grid grid-cols-4 gap-2 mb-4 pb-4 border-b border-slate-200/50">
-                                            {['Validation', 'Refill', 'New Unit', 'Maintenance'].map((m, modeIndex) => (
+        {/* Edit button – sirf jab locked ho */}
+        {ext.isLocked && (
+            <button
+                onClick={() => setExtinguishers(prev => prev.map((item, i) => i === index ? { ...item, isLocked: false } : item))}
+                className="p-2 bg-white text-blue-500 rounded-lg shadow-sm border border-slate-200 hover:text-blue-600"
+                title="Edit / Unlock"
+            >
+                <Pencil size={16} />
+            </button>
+        )}
+                                  <button onClick={() => removeExtinguisher(index)} className="p-2 bg-white text-red-500 rounded-lg shadow-sm border border-slate-200 hover:text-red-600">
+                                      <Trash size={16} />
+                                  </button>
+                              </div>
+
+                                <div className="grid grid-cols-4 gap-2  mb-4 pb-4 border-b border-slate-200/50">
+                                        {['Validation', 'Refill', 'New Unit', 'Maintenance'].map((m) => (
                                             <button
                                                 key={m}
-                                                onClick={() => handleExtinguisherChange(index, 'mode', m)}
-                                                    className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${ext.mode === m ? 'bg-primary-500 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}
-                                                >
-                                                    {m}
-                                                </button>
-                                            ))}
-                                        </div>
+                                                onClick={() => !ext.isLocked && handleExtinguisherChange(index, 'mode', m)} // NEW: Disable if locked
+                                                disabled={ext.isLocked && ext.mode !== m} // NEW: Disable others if locked
+                                                className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                                                    ext.mode === m ? 'bg-primary-500 text-white shadow-md' : 
+                                                    (ext.isLocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50')
+                                                }`}
+                                            >
+                                                {m}
+                                            </button>
+                                        ))}
+                                    </div>
                                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4 pb-4'>
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Type</label>
-                                        <select value={ext.type} onChange={(e) => handleExtinguisherChange(index, 'type', e.target.value)} className="input-field py-2 text-sm">
+                                        <select value={ext.type} onChange={(e) => handleExtinguisherChange(index, 'type', e.target.value)} disabled={ext.isLocked} className="input-field py-2 text-sm">
                                             <option>ABC Dry Powder</option>
                                             <option>CO2 - Carbon Dioxide</option>
                                             <option>Water Type</option>
@@ -924,7 +982,7 @@ const uploadMaintenancePhoto = async (file, index) => {
 
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Capacity</label>
-                                        <select value={ext.capacity} onChange={(e) => handleExtinguisherChange(index, 'capacity', e.target.value)} className="input-field py-2 text-sm">
+                                        <select value={ext.capacity} disabled={ext.isLocked} onChange={(e) => handleExtinguisherChange(index, 'capacity', e.target.value)} className="input-field py-2 text-sm">
                                             <option>1kg</option><option>2kg</option><option>4kg</option><option>6kg</option><option>9kg</option><option>25kg</option>
                                         </select>
                                     </div>
@@ -1418,6 +1476,7 @@ const uploadMaintenancePhoto = async (file, index) => {
     </div>
   </>
 )}
+
                                 </div>
                             </div>
                         ))}
