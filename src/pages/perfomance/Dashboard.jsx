@@ -40,7 +40,7 @@ const AgentPerformance = () => {
     today: 0,
     total: 0,
     totalValue: 0,
-    refill: 0,
+    byCategory: {},
   });
 
   const toNumber = (val, fallback = 0) =>
@@ -80,6 +80,12 @@ const AgentPerformance = () => {
         /* ---------- SUMMARY ---------- */
         const todayStr = new Date().toISOString().split("T")[0];
 
+        const categorySummary = {};
+
+        data.forEach((d) => {
+          categorySummary[d.status] = (categorySummary[d.status] || 0) + 1;
+        });
+
         const totalValue = data.reduce(
           (sum, d) => sum + toNumber(d.price) * toNumber(d.quantity, 1),
           0,
@@ -91,7 +97,7 @@ const AgentPerformance = () => {
           ).length,
           total: data.length,
           totalValue,
-          refill: data.filter((d) => d.status === "Refilled").length,
+          byCategory: categorySummary,
         });
 
         /* ---------- CATEGORY CHART DATA ---------- */
@@ -179,12 +185,40 @@ const AgentPerformance = () => {
           value={`$${summary.totalValue}`}
           color="bg-orange-500"
         />
-        <StatCard
-          icon={RefreshCcw}
-          title="Refill Requests"
-          value={summary.refill}
-          color="bg-red-500"
-        />
+        <div className="bg-white rounded-3xl p-4 shadow-soft border border-slate-100">
+  <div className="flex items-center gap-2 mb-3">
+    <div className="p-2 rounded-xl bg-red-100">
+      <RefreshCcw size={18} className="text-red-500" />
+    </div>
+    <p className="text-sm font-semibold text-slate-700">
+      Requests by Category
+    </p>
+  </div>
+
+  <div className="space-y-1">
+    {Object.entries(summary.byCategory || {}).map(([category, qty]) => (
+      <div
+        key={category}
+        className="flex justify-between items-center
+                   text-sm px-2 py-1 rounded-lg
+                   hover:bg-slate-50"
+      >
+        {/* Category */}
+        <span className="text-slate-600 truncate">
+          {category}
+        </span>
+        {/* Quantity */}
+        <span className="font-bold text-slate-900">
+          {qty}
+        </span>
+
+        
+      </div>
+    ))}
+  </div>
+</div>
+
+
       </div>
 
       {/* ---------- CATEGORY CHARTS ---------- */}
