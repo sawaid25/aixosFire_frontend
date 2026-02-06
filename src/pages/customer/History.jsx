@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { Calendar, CheckCircle, Clock, FileText, AlertCircle, Wrench } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const ServiceTimeline = ({ status }) => {
     const steps = ['Requested', 'Scheduled', 'In Progress', 'Completed'];
@@ -85,7 +86,8 @@ const History = () => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="relative min-h-[400px] max-w-4xl mx-auto space-y-8">
+            {loading && <PageLoader message="Loading service record..." />}
             <div>
                 <h1 className="text-3xl font-display font-bold text-slate-900 mb-2">Service History</h1>
                 <p className="text-slate-500">Track current requests and view past reports.</p>
@@ -111,9 +113,7 @@ const History = () => {
 
             {/* Content */}
             <div className="space-y-4">
-                {loading ? (
-                    <div className="text-center py-12 text-slate-400">Loading records...</div>
-                ) : displayedServices.length === 0 ? (
+                {!loading && displayedServices.length === 0 ? (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                             <FileText size={32} />

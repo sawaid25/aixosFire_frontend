@@ -3,6 +3,7 @@ import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { Search, Filter, QrCode, AlertTriangle, CheckCircle, FireExtinguisher, Calendar, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PageLoader from '../../components/PageLoader';
 
 const Inventory = () => {
     const { user } = useAuth();
@@ -53,7 +54,8 @@ const Inventory = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="relative min-h-[400px] space-y-6">
+            {loading && <PageLoader message="Loading asset inventory..." />}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Asset Inventory</h1>
@@ -86,9 +88,7 @@ const Inventory = () => {
             </div>
 
             <div className="bg-white rounded-3xl shadow-soft border border-slate-100 overflow-hidden">
-                {loading ? (
-                    <div className="p-12 text-center text-slate-500">Loading assets...</div>
-                ) : filteredInventory.length === 0 ? (
+                {!loading && filteredInventory.length === 0 ? (
                     <div className="p-12 text-center">
                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                             <FireExtinguisher size={32} />

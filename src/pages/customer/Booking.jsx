@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft, Wrench, RefreshCcw, Search, PlusCircle, Calendar, CheckCircle, Clock } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const ServiceOption = ({ icon: Icon, title, desc, price, selected, onClick }) => (
     <div
@@ -83,7 +84,8 @@ const Booking = () => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="relative min-h-[400px] max-w-4xl mx-auto">
+            {loading && <PageLoader message="Processing your booking..." />}
             <div className="flex items-center gap-4 mb-8">
                 <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
                     <ArrowLeft size={24} />

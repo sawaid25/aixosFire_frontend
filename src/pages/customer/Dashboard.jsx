@@ -3,6 +3,7 @@ import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { FireExtinguisher, AlertTriangle, CheckCircle, Plus, Calendar, Clock, ArrowRight } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const InventoryCard = ({ item }) => {
     const isExpired = new Date(item.expiry_date) < new Date();
@@ -66,46 +67,46 @@ const CustomerDashboard = () => {
     const [userLocation, setUserLocation] = useState(null);
 
     useEffect(() => {
-    if (!navigator.geolocation || !user) return;
+        if (!navigator.geolocation || !user) return;
 
-    let lastUpdate = 0;
+        let lastUpdate = 0;
 
-    const watchId = navigator.geolocation.watchPosition(
-        async (position) => {
-            const { latitude, longitude } = position.coords;
+        const watchId = navigator.geolocation.watchPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
 
-            // Optional: for showing marker or debugging
-            console.log("Customer Location:", latitude, longitude);
+                // Optional: for showing marker or debugging
+                console.log("Customer Location:", latitude, longitude);
 
-            const now = Date.now();
-            if (now - lastUpdate < 10000) return; // update every 10 seconds
-            lastUpdate = now;
+                const now = Date.now();
+                if (now - lastUpdate < 10000) return; // update every 10 seconds
+                lastUpdate = now;
 
-            try {
-                // ✅ Update customer location in Supabase
-                const { error } = await supabase
-                    .from('customers')
-                    .update({
-                        location_lat: latitude,
-                        location_lng: longitude
-                    })
-                    .eq('id', user.id); // update specific customer
+                try {
+                    // ✅ Update customer location in Supabase
+                    const { error } = await supabase
+                        .from('customers')
+                        .update({
+                            location_lat: latitude,
+                            location_lng: longitude
+                        })
+                        .eq('id', user.id); // update specific customer
 
-                if (error) {
-                    console.error('Failed to update location:', error.message);
-                } else {
-                    console.log('Customer location updated successfully');
+                    if (error) {
+                        console.error('Failed to update location:', error.message);
+                    } else {
+                        console.log('Customer location updated successfully');
+                    }
+                } catch (err) {
+                    console.error('Error updating location:', err);
                 }
-            } catch (err) {
-                console.error('Error updating location:', err);
-            }
-        },
-        (err) => console.error('Geolocation error:', err),
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-    );
+            },
+            (err) => console.error('Geolocation error:', err),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        );
 
-    return () => navigator.geolocation.clearWatch(watchId);
-}, [user]);
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, [user]);
 
 
     useEffect(() => {
@@ -140,7 +141,8 @@ const CustomerDashboard = () => {
     }, [user]);
 
     return (
-        <div className="space-y-8">
+        <div className="relative min-h-[400px] space-y-8">
+            {loading && <PageLoader message="Loading safety overview..." />}
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>

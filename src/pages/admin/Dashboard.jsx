@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
+import PageLoader from '../../components/PageLoader';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Users, UserPlus, DollarSign, Activity, TrendingUp, AlertCircle, FileText } from 'lucide-react';
 
@@ -92,10 +93,9 @@ const AdminDashboard = () => {
         loadData();
     }, []);
 
-    if (loading) return <div className="p-10 text-center text-slate-500 font-medium">Loading Dashboard...</div>;
-
     return (
-        <div className="space-y-8">
+        <div className="relative min-h-[400px] space-y-8">
+            {loading && <PageLoader message="Loading dashboard data..." />}
             <div className="flex justify-between items-end">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Admin Overview</h1>

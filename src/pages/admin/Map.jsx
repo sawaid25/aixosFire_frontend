@@ -5,6 +5,7 @@ import { supabase } from '../../supabaseClient';
 import L from 'leaflet';
 import { User, Briefcase } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
+import PageLoader from '../../components/PageLoader';
 
 // Custom Icons
 const createIcon = (color, Icon) => {
@@ -62,10 +63,9 @@ const GlobalMap = () => {
         fetchMapData();
     }, []);
 
-    if (loading) return <div className="h-[600px] flex items-center justify-center bg-slate-50 text-slate-400">Loading Map Data...</div>;
-
     return (
-        <div className="space-y-6">
+        <div className="relative min-h-[400px] space-y-6">
+            {loading && <PageLoader message="Loading map data..." />}
             <div>
                 <h1 className="text-3xl font-display font-bold text-slate-900">Territory Overview</h1>
                 <p className="text-slate-500">Live view of active agents and customer locations.</p>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import PageLoader from '../../components/PageLoader';
 import QRCode from 'qrcode';
 import {
   Plus, Trash, Save, ArrowLeft, Building, FireExtinguisher, FileText,
@@ -959,7 +960,8 @@ const VisitForm = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="relative min-h-[500px] max-w-4xl mx-auto p-4 md:p-8">
+      {loading && <PageLoader message="Processing your visit log..." />}
       {/* Header / Stepper */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">

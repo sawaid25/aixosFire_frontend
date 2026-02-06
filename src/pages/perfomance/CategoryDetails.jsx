@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
+import PageLoader from "../../components/PageLoader";
 
 const CategoryDetails = () => {
   const { category } = useParams();
@@ -88,7 +89,7 @@ const CategoryDetails = () => {
   const formatDate = (dateStr) => (dateStr ? dateStr.split("T")[0] : "NA");
 
   return (
-    <div className="space-y-6">
+    <div className="relative min-h-[400px] space-y-6">
       {/* Back Link + Title */}
       <div className="flex items-center gap-3">
         <Link
@@ -102,11 +103,10 @@ const CategoryDetails = () => {
       </div>
 
       {/* Loading / Empty State */}
-      {loading ? (
-        <p className="text-center py-10">Loading...</p>
-      ) : data.length === 0 ? (
+      {loading && <PageLoader />}
+      {!loading && data.length === 0 ? (
         <p className="text-center py-10">No records found</p>
-      ) : (
+      ) : !loading && (
         <div className="overflow-x-auto bg-white rounded-2xl shadow-soft border">
           <table className="min-w-full text-sm divide-y divide-slate-200">
             <thead className="bg-slate-50">

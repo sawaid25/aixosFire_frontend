@@ -15,6 +15,7 @@ import {
 import { ClipboardList, DollarSign, RefreshCcw, Layers } from "lucide-react";
 // import { useRouter } from 'react-router-dom'
 import { Link } from 'react-router-dom';
+import PageLoader from "../../components/PageLoader";
 
 /* ---------- Reusable Card ---------- */
 const StatCard = ({ icon: Icon, title, value, color }) => (
@@ -162,7 +163,7 @@ const AgentPerformance = () => {
   }, [user]);
 
   return (
-    <div className="space-y-8">
+    <div className="relative min-h-[400px] space-y-8">
       {loading && <PageLoader />}
 
       <h1 className="text-3xl font-bold">Performance</h1>
@@ -188,37 +189,37 @@ const AgentPerformance = () => {
           color="bg-orange-500"
         />
         <div className="bg-white rounded-3xl p-4 shadow-soft border border-slate-100">
-  <div className="flex items-center gap-2 mb-3">
-    <div className="p-2 rounded-xl bg-red-100">
-      <RefreshCcw size={18} className="text-red-500" />
-    </div>
-    <p className="text-sm font-semibold text-slate-700">
-      Requests by Category
-    </p>
-  </div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 rounded-xl bg-red-100">
+              <RefreshCcw size={18} className="text-red-500" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">
+              Requests by Category
+            </p>
+          </div>
 
-  <div className="space-y-1">
-    {Object.entries(summary.byCategory || {}).map(([category, qty]) => (
-      <div
-        key={category}
-        className="flex justify-between items-center
+          <div className="space-y-1">
+            {Object.entries(summary.byCategory || {}).map(([category, qty]) => (
+              <div
+                key={category}
+                className="flex justify-between items-center
                    text-sm px-2 py-1 rounded-lg
                    hover:bg-slate-50"
-      >
-        {/* Category */}
-        <span className="text-slate-600 truncate">
-          {category}
-        </span>
-        {/* Quantity */}
-        <span className="font-bold text-slate-900">
-          {qty}
-        </span>
+              >
+                {/* Category */}
+                <span className="text-slate-600 truncate">
+                  {category}
+                </span>
+                {/* Quantity */}
+                <span className="font-bold text-slate-900">
+                  {qty}
+                </span>
 
-        
-      </div>
-    ))}
-  </div>
-</div>
+
+              </div>
+            ))}
+          </div>
+        </div>
 
 
       </div>
@@ -295,40 +296,40 @@ const AgentPerformance = () => {
                   to={`/agent/performance/${row.category.toLowerCase()}`}
                   className="contents"
                 >
-                <tr
-                  className={`cursor-pointer border-b last:border-0 transition
+                  <tr
+                    className={`cursor-pointer border-b last:border-0 transition
                     ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}
                     hover:bg-blue-50`}
-                >
-                  <td className="px-5 py-4 font-medium text-slate-900">
-                    {row.category}
-                  </td>
-                  <td className="px-5 py-4 text-center font-semibold">
-                    {row.total}
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <span
-                      className="inline-flex items-center px-2.5 py-1 rounded-full
+                  >
+                    <td className="px-5 py-4 font-medium text-slate-900">
+                      {row.category}
+                    </td>
+                    <td className="px-5 py-4 text-center font-semibold">
+                      {row.total}
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-full
                 bg-green-100 text-green-700 text-xs font-semibold"
-                    >
-                      {row.active}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <span
-                      className="inline-flex items-center px-2.5 py-1 rounded-full
+                      >
+                        {row.active}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-full
                 bg-red-100 text-red-700 text-xs font-semibold"
-                    >
-                      {row.closed}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-center text-slate-700">
-                    {row.quantity}
-                  </td>
-                  <td className="px-5 py-4 text-right font-semibold text-orange-600">
-                    ${row.value}
-                  </td>
-                </tr>
+                      >
+                        {row.closed}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-center text-slate-700">
+                      {row.quantity}
+                    </td>
+                    <td className="px-5 py-4 text-right font-semibold text-orange-600">
+                      ${row.value}
+                    </td>
+                  </tr>
                 </Link>
               ))}
 
@@ -361,8 +362,3 @@ const AgentPerformance = () => {
 
 export default AgentPerformance;
 
-const PageLoader = () => (
-  <div className="fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50">
-    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-  </div>
-);

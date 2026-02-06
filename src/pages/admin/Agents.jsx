@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { Check, X, User, Phone, MapPin, FileText, Shield } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const AgentManagement = () => {
     const [agents, setAgents] = useState([]);
@@ -53,7 +54,8 @@ const AgentManagement = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="relative min-h-[400px] space-y-6">
+            {loading && <PageLoader message="Loading agents..." />}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Agent Management</h1>
@@ -72,12 +74,7 @@ const AgentManagement = () => {
                 </div>
             </div>
 
-            {loading ? (
-                <div className="text-center py-12">
-                    <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-500">Loading agents...</p>
-                </div>
-            ) : agents.length === 0 ? (
+            {!loading && agents.length === 0 ? (
                 <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-soft">
                     <Shield size={48} className="mx-auto text-slate-200 mb-4" />
                     <h3 className="text-xl font-bold text-slate-900">No {activeTab} Agents</h3>
@@ -121,23 +118,23 @@ const AgentManagement = () => {
                                         {agent.territory || 'Unassigned'}
                                     </div>
                                     {/* Documents Preview Link */}
-                                {agent.residential_letter ? (
-    <div className="flex items-center gap-2 mt-2">
-        <a
-            href={getImageUrl(agent.residential_letter)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg transition-colors"
-        >
-            <FileText size={14} /> View Residential Letter
-        </a>
-    </div>
-) : (
-    <div className="text-sm text-slate-500 mt-2">Residential Letter: N/A</div>
-)}
+                                    {agent.residential_letter ? (
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <a
+                                                href={getImageUrl(agent.residential_letter)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg transition-colors"
+                                            >
+                                                <FileText size={14} /> View Residential Letter
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-slate-500 mt-2">Residential Letter: N/A</div>
+                                    )}
                                 </div>
 
-                               
+
                             </div>
 
                             {/* Actions */}

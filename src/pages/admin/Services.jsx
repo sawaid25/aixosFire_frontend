@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { Search, Filter, Calendar, User, MapPin, Briefcase } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const AdminServices = () => {
     const [services, setServices] = useState([]);
@@ -87,7 +88,8 @@ const AdminServices = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="relative min-h-[400px] space-y-6">
+            {loading && <PageLoader message="Loading service queue..." />}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Service Queue</h1>
@@ -124,9 +126,7 @@ const AdminServices = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {loading ? (
-                            <tr><td colSpan="5" className="px-6 py-8 text-center text-slate-400">Loading...</td></tr>
-                        ) : services.length === 0 ? (
+                        {!loading && services.length === 0 ? (
                             <tr><td colSpan="5" className="px-6 py-8 text-center text-slate-400">No services found.</td></tr>
                         ) : (
                             services.map(service => (

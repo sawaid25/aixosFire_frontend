@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { ShieldCheck, Download, FileText, CheckCircle, Printer } from 'lucide-react';
+import PageLoader from '../../components/PageLoader';
 
 const CertificateCard = ({ item }) => {
     return (
@@ -91,7 +92,8 @@ const Certificates = () => {
     }, [user]);
 
     return (
-        <div className="space-y-6">
+        <div className="relative min-h-[400px] space-y-6">
+            {loading && <PageLoader message="Loading certificates..." />}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-slate-900">Digital Certificates</h1>
@@ -99,9 +101,7 @@ const Certificates = () => {
                 </div>
             </div>
 
-            {loading ? (
-                <div className="text-center py-12 text-slate-400">Loading certificates...</div>
-            ) : inventory.length === 0 ? (
+            {!loading && inventory.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200">
                     <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                         <FileText size={32} />
