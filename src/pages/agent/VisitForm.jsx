@@ -527,14 +527,14 @@ const VisitForm = () => {
     if (!formData.customerId) return;
     setLoading(true);
     try {
-      console.log("Updating customer record in database...", formData.customerId);
-
+      const custId = formData.customerId;
       let finalBusinessType = formData.businessType;
       if (formData.businessType === 'Other' && formData.customBusinessType.trim()) {
         finalBusinessType = formData.customBusinessType.trim();
       }
 
-      const { error } = await supabase
+      // 1. Persist updated customer info
+      const { error: updateErr } = await supabase
         .from('customers')
         .update({
           business_name: formData.businessName,
@@ -545,16 +545,94 @@ const VisitForm = () => {
           business_type: finalBusinessType,
           last_updated: new Date().toISOString(),
         })
-        .eq('id', formData.customerId);
+        .eq('id', custId);
 
-      if (error) throw error;
+      if (updateErr) throw updateErr;
 
-      console.log("SUCCESS: Customer record successfully updated in database.");
+      // 2. Regenerate QR code
+      let qrDataUrl = null;
+      let qrUrl = null;
+      try {
+        qrUrl = `${window.location.origin}/agent/customer/${custId}`;
+        qrDataUrl = await QRCode.toDataURL(qrUrl, {
+          errorCorrectionLevel: 'M',
+          width: 256,
+          margin: 2,
+        });
+        const { error: qrUpdateErr } = await supabase
+          .from('customers')
+          .update({ qr_code_url: qrDataUrl, last_updated: new Date().toISOString() })
+          .eq('id', custId);
+        if (qrUpdateErr) throw qrUpdateErr;
+        setQrPreview(qrDataUrl);
+      } catch (qrErr) {
+        toast.error('QR regeneration failed: ' + (qrErr?.message || qrErr));
+        console.error('[QR] Regeneration failed:', qrErr);
+      }
+
+      // 3. Insert QR history record (only if QR was generated successfully)
+      if (qrDataUrl && qrUrl) {
+        try {
+          const { count, error: countErr } = await supabase
+            .from('customer_qr_history')
+            .select('id', { count: 'exact', head: true })
+            .eq('customer_id', custId);
+          if (countErr) throw countErr;
+
+          const payload = {
+            customer_id: custId,
+            business_name: formData.businessName,
+            owner_name: formData.ownerName || null,
+            phone: formData.phone || null,
+            email: formData.email || null,
+            address: formData.address || null,
+            business_type: finalBusinessType || null,
+          };
+
+          const { error: histErr } = await supabase
+            .from('customer_qr_history')
+            .insert({
+              customer_id: custId,
+              version: (count || 0) + 1,
+              qr_data_url: qrDataUrl,
+              qr_url_value: qrUrl,
+              qr_payload: payload,
+              generated_by: user?.name || user?.email || 'Agent',
+              reason: 'Customer Information Updated',
+            });
+
+          if (histErr) {
+            // If qr_payload column missing, retry without it
+            if (histErr.code === '42703' && histErr.message?.includes('qr_payload')) {
+              const { error: retryErr } = await supabase
+                .from('customer_qr_history')
+                .insert({
+                  customer_id: custId,
+                  version: (count || 0) + 1,
+                  qr_data_url: qrDataUrl,
+                  qr_url_value: qrUrl,
+                  generated_by: user?.name || user?.email || 'Agent',
+                  reason: 'Customer Information Updated',
+                });
+              if (retryErr) throw retryErr;
+              toast('QR history saved (run migration to enable data snapshots)', { icon: '⚠️' });
+            } else {
+              throw histErr;
+            }
+          } else {
+            toast.success('QR code updated & history saved');
+          }
+        } catch (histErr) {
+          toast.error('QR history insert failed: ' + (histErr?.message || histErr));
+          console.error('[QR History] Insert failed:', histErr);
+        }
+      }
+
       setIsEditingCustomer(false);
-      alert("Customer details updated successfully!");
+      toast.success('Customer updated successfully');
     } catch (err) {
       console.error("Update failed:", err);
-      alert("Failed to update customer: " + err.message);
+      toast.error("Failed to update customer: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -821,6 +899,28 @@ const VisitForm = () => {
   };
 
   console.log(formData)
+  /* ── save one QR history record (non-blocking, never throws) ── */
+  const saveQrHistory = async (custId, qrDataUrl, qrUrl, reason, payload) => {
+    try {
+      const { count } = await supabase
+        .from('customer_qr_history')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', custId);
+
+      await supabase.from('customer_qr_history').insert({
+        customer_id: custId,
+        version: (count || 0) + 1,
+        qr_data_url: qrDataUrl,
+        qr_url_value: qrUrl,
+        qr_payload: payload,
+        generated_by: user?.name || user?.email || 'Agent',
+        reason,
+      });
+    } catch (err) {
+      console.warn('[QR] History save failed:', err);
+    }
+  };
+
   const generateQRPreview = async () => {
     if (!formData.businessName) {
       alert("Please enter business name first");
@@ -828,6 +928,8 @@ const VisitForm = () => {
     }
     setLoading(true);
     try {
+      // Track whether this is an existing customer BEFORE any DB insert
+      const isExistingCustomer = !isNewCustomer && !!formData.customerId;
       let custId = formData.customerId;
 
       // New customer: save to DB first to get a real ID
@@ -879,6 +981,24 @@ const VisitForm = () => {
         qr_code_url: qrDataUrl,
         last_updated: new Date().toISOString(),
       }).eq('id', custId);
+
+      // Save QR history record (non-blocking)
+      const bType = formData.businessType === 'Other' ? formData.customBusinessType.trim() : formData.businessType;
+      saveQrHistory(
+        custId,
+        qrDataUrl,
+        url,
+        isExistingCustomer ? 'Customer Information Updated' : 'Initial Customer Creation',
+        {
+          customer_id: custId,
+          business_name: formData.businessName,
+          owner_name: formData.ownerName || null,
+          phone: formData.phone || null,
+          email: formData.email || null,
+          address: formData.address || null,
+          business_type: bType || null,
+        }
+      );
 
       setQrPreview(qrDataUrl);
     } catch (err) {
@@ -1244,6 +1364,23 @@ const VisitForm = () => {
             qr_code_url: finalQrUrl,
             last_updated: new Date().toISOString()
           }).eq('id', finalCustId);
+
+          // Save QR history record (non-blocking)
+          saveQrHistory(
+            finalCustId,
+            finalQrUrl,
+            qrUrl,
+            'Initial Customer Creation',
+            {
+              customer_id: finalCustId,
+              business_name: formData.businessName,
+              owner_name: formData.ownerName || null,
+              phone: formData.phone || null,
+              email: formData.email || null,
+              address: formData.address || null,
+              business_type: finalBusinessType || null,
+            }
+          );
         } catch (qrErr) {
           console.error('QR generation/update failed:', qrErr);
         }

@@ -68,6 +68,25 @@ const calcBenchmark = (inq) => {
 
 /* ─── Small helpers ────────────────────────────────────── */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const INQUIRIES_PER_PAGE = 15;
+
+const getTimeBounds = (period) => {
+    const now = new Date();
+    if (period === 'today') {
+        const start = new Date(now); start.setHours(0, 0, 0, 0);
+        return { start, end: now };
+    }
+    if (period === 'week') {
+        const start = new Date(now);
+        start.setDate(now.getDate() - now.getDay());
+        start.setHours(0, 0, 0, 0);
+        return { start, end: now };
+    }
+    if (period === 'month') {
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+    }
+    return null;
+};
 
 const getBadgeClass = (s) => {
     const v = (s || '').toLowerCase();
@@ -156,6 +175,8 @@ const AgentProfile = () => {
     const [inquiries, setInquiries]         = useState([]);
     const [activeTab, setActiveTab]         = useState(searchParams.get('tab') || 'overview');
     const [statusFilter, setStatusFilter]   = useState('All');
+    const [timePeriod, setTimePeriod]       = useState('all');
+    const [inquiriesPage, setInquiriesPage] = useState(1);
     const [complaints, setComplaints]       = useState([]);
     const [complaintsLoading, setComplaintsLoading] = useState(false);
 
@@ -258,17 +279,50 @@ const AgentProfile = () => {
         return { withinCount, missedCount, successRate, avgDays, evaluated, chartData };
     }, [inquiries]);
 
+    /* ── Summary stats for the Inquiries tab header cards ── */
+    const inquiryStats = useMemo(() => {
+        const now        = new Date();
+        const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+        const weekStart  = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0, 0, 0, 0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        return {
+            total:     inquiries.length,
+            today:     inquiries.filter(i => new Date(i.created_at) >= todayStart).length,
+            thisWeek:  inquiries.filter(i => new Date(i.created_at) >= weekStart).length,
+            thisMonth: inquiries.filter(i => new Date(i.created_at) >= monthStart).length,
+        };
+    }, [inquiries]);
+
     /* ── Filter for Inquiries tab ── */
     const filteredInquiries = useMemo(() => {
-        if (statusFilter === 'All') return inquiries;
-        return inquiries.filter(i => {
-            const s = (i.status || '').toLowerCase();
-            if (statusFilter === 'Completed') return ['completed', 'accepted', 'closed'].includes(s);
-            if (statusFilter === 'Rejected')  return ['rejected', 'cancelled'].includes(s);
-            if (statusFilter === 'Pending')   return !['completed', 'accepted', 'closed', 'rejected', 'cancelled'].includes(s);
-            return true;
-        });
-    }, [inquiries, statusFilter]);
+        let result = inquiries;
+
+        const bounds = getTimeBounds(timePeriod);
+        if (bounds) {
+            result = result.filter(i => {
+                const d = new Date(i.created_at);
+                return d >= bounds.start && d <= bounds.end;
+            });
+        }
+
+        if (statusFilter !== 'All') {
+            result = result.filter(i => {
+                const s = (i.status || '').toLowerCase();
+                if (statusFilter === 'Completed') return ['completed', 'accepted', 'closed'].includes(s);
+                if (statusFilter === 'Rejected')  return ['rejected', 'cancelled'].includes(s);
+                if (statusFilter === 'Pending')   return !['completed', 'accepted', 'closed', 'rejected', 'cancelled'].includes(s);
+                return true;
+            });
+        }
+
+        return result;
+    }, [inquiries, statusFilter, timePeriod]);
+
+    const totalInquiryPages    = Math.ceil(filteredInquiries.length / INQUIRIES_PER_PAGE);
+    const paginatedInquiries   = useMemo(() => {
+        const start = (inquiriesPage - 1) * INQUIRIES_PER_PAGE;
+        return filteredInquiries.slice(start, start + INQUIRIES_PER_PAGE);
+    }, [filteredInquiries, inquiriesPage]);
 
     if (loading) return <PageLoader message="Loading agent profile..." />;
     if (!agent) return (
@@ -394,55 +448,126 @@ const AgentProfile = () => {
 
             {/* ══ INQUIRIES TAB ══ */}
             {activeTab === 'inquiries' && (
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
-                    <div className="flex items-center justify-between p-6 border-b border-slate-100">
-                        <h3 className="font-bold text-slate-900">All Assigned Inquiries</h3>
-                        <div className="flex gap-2">
-                            {['All', 'Pending', 'Completed', 'Rejected'].map(f => (
+                <div className="space-y-4">
+
+                    {/* ── Summary stat cards (clickable to filter by period) ── */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                            { key: 'all',   label: 'All Time',   value: inquiryStats.total,     accent: 'slate' },
+                            { key: 'today', label: 'Today',      value: inquiryStats.today,     accent: 'blue' },
+                            { key: 'week',  label: 'This Week',  value: inquiryStats.thisWeek,  accent: 'violet' },
+                            { key: 'month', label: 'This Month', value: inquiryStats.thisMonth, accent: 'emerald' },
+                        ].map(({ key, label, value, accent }) => {
+                            const active = timePeriod === key;
+                            const colors = {
+                                slate:   { border: active ? 'border-slate-800'   : 'border-slate-100',   text: 'text-slate-900',   sub: 'text-slate-400'  },
+                                blue:    { border: active ? 'border-blue-500'    : 'border-slate-100',   text: 'text-blue-700',    sub: 'text-blue-400'   },
+                                violet:  { border: active ? 'border-violet-500'  : 'border-slate-100',   text: 'text-violet-700',  sub: 'text-violet-400' },
+                                emerald: { border: active ? 'border-emerald-500' : 'border-slate-100',   text: 'text-emerald-700', sub: 'text-emerald-400'},
+                            }[accent];
+                            return (
                                 <button
-                                    key={f}
-                                    onClick={() => setStatusFilter(f)}
-                                    className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${statusFilter === f ? 'bg-slate-900 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
-                                >{f}</button>
-                            ))}
-                        </div>
+                                    key={key}
+                                    onClick={() => { setTimePeriod(key); setInquiriesPage(1); }}
+                                    className={`bg-white rounded-2xl border-2 p-4 text-left transition-all shadow-soft hover:shadow-md ${colors.border}`}
+                                >
+                                    <p className={`text-xs font-bold uppercase tracking-widest ${colors.sub}`}>{label}</p>
+                                    <p className={`text-2xl font-bold mt-1 ${colors.text}`}>{value}</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">Inquiries</p>
+                                </button>
+                            );
+                        })}
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider">
-                                    <th className="px-6 py-3">Inquiry No</th>
-                                    <th className="px-6 py-3">Customer</th>
-                                    <th className="px-6 py-3">Type</th>
-                                    <th className="px-6 py-3">Status</th>
-                                    <th className="px-6 py-3">Due Date</th>
-                                    <th className="px-6 py-3">Created</th>
-                                    <th className="px-6 py-3">Details</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {filteredInquiries.length === 0 && (
-                                    <tr><td colSpan={7} className="px-6 py-10 text-center text-slate-400">No {statusFilter.toLowerCase()} inquiries found.</td></tr>
-                                )}
-                                {filteredInquiries.map(inq => (
-                                    <tr key={inq.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-slate-900">{inq.inquiry_no || `#${inq.id?.toString().slice(-6)}`}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{inq.customers?.business_name || '—'}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-500 capitalize">{inq.type || '—'}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${getBadgeClass(inq.status)}`}>{inq.status || 'Pending'}</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-500">{inq.follow_up_date ? new Date(inq.follow_up_date).toLocaleDateString() : '—'}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">{new Date(inq.created_at).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4">
-                                            <Link to={`/admin/inquiries/${inq.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:underline">
-                                                <Eye size={12} /> View
-                                            </Link>
-                                        </td>
-                                    </tr>
+
+                    {/* ── Table card ── */}
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-slate-100">
+                            <div>
+                                <h3 className="font-bold text-slate-900">Assigned Inquiries</h3>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    {filteredInquiries.length} {filteredInquiries.length === 1 ? 'inquiry' : 'inquiries'}{' '}
+                                    {timePeriod === 'today' ? '· today' : timePeriod === 'week' ? '· this week' : timePeriod === 'month' ? '· this month' : '· all time'}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {['All', 'Pending', 'Completed', 'Rejected'].map(f => (
+                                    <button
+                                        key={f}
+                                        onClick={() => { setStatusFilter(f); setInquiriesPage(1); }}
+                                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${statusFilter === f ? 'bg-slate-900 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
+                                    >{f}</button>
                                 ))}
-                            </tbody>
-                        </table>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider">
+                                        <th className="px-6 py-3">Inquiry No</th>
+                                        <th className="px-6 py-3">Customer</th>
+                                        <th className="px-6 py-3">Type</th>
+                                        <th className="px-6 py-3">Status</th>
+                                        <th className="px-6 py-3">Created</th>
+                                        <th className="px-6 py-3">Last Updated</th>
+                                        <th className="px-6 py-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {paginatedInquiries.length === 0 && (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-12 text-center">
+                                                <Activity size={28} className="mx-auto text-slate-200 mb-2" />
+                                                <p className="text-slate-400 text-sm font-medium">No inquiries match the selected filters.</p>
+                                                <p className="text-xs text-slate-300 mt-1">Try a different time period or status filter.</p>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {paginatedInquiries.map(inq => (
+                                        <tr key={inq.id} className="hover:bg-slate-50/70 transition-colors">
+                                            <td className="px-6 py-4 font-bold text-slate-900 text-sm">{inq.inquiry_no || `#${inq.id?.toString().slice(-6)}`}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-700 font-medium">{inq.customers?.business_name || '—'}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-500 capitalize">{inq.type || '—'}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${getBadgeClass(inq.status)}`}>{inq.status || 'Pending'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-500">{fmtFull(inq.created_at)}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-400">{inq.updated_at ? fmtFull(inq.updated_at) : '—'}</td>
+                                            <td className="px-6 py-4">
+                                                <Link
+                                                    to={`/admin/inquiries/${inq.id}`}
+                                                    className="inline-flex items-center gap-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-700 text-white px-3 py-1.5 rounded-xl transition-colors"
+                                                >
+                                                    <Eye size={11} /> View Details
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {totalInquiryPages > 1 && (
+                            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
+                                <p className="text-xs text-slate-400">
+                                    Showing {((inquiriesPage - 1) * INQUIRIES_PER_PAGE) + 1}–{Math.min(inquiriesPage * INQUIRIES_PER_PAGE, filteredInquiries.length)} of {filteredInquiries.length}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setInquiriesPage(p => Math.max(1, p - 1))}
+                                        disabled={inquiriesPage === 1}
+                                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >← Prev</button>
+                                    <span className="text-xs text-slate-500 font-medium px-1">{inquiriesPage} / {totalInquiryPages}</span>
+                                    <button
+                                        onClick={() => setInquiriesPage(p => Math.min(totalInquiryPages, p + 1))}
+                                        disabled={inquiriesPage === totalInquiryPages}
+                                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >Next →</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
