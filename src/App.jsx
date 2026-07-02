@@ -16,6 +16,9 @@ import Customers from './pages/agent/Customers';
 import CustomerDetails from './pages/agent/CustomerDetails';
 import QueryDetail from './pages/agent/QueryDetail';
 import AgentComplaintPage from './pages/agent/ComplaintPage';
+import SeniorAgentActivate from './pages/agent/SeniorAgentActivate';
+import TeamActivity from './pages/agent/TeamActivity';
+import TeamAgentDetail from './pages/agent/TeamAgentDetail';
 
 // Customer Pages
 import CustomerDashboard from './pages/customer/Dashboard';
@@ -90,6 +93,9 @@ function App() {
             <Route path="/forgot-password/:role" element={<ForgotPassword />} />
             <Route path="/set-password" element={<SetPassword />} />
 
+            {/* Senior Agent Activation (public — no login needed) */}
+            <Route path="/senior-agent/activate" element={<SeniorAgentActivate />} />
+
             {/* Agent Routes */}
             <Route path="/agent/*" element={
               <ProtectedRoute allowedRoles={['agent']}>
@@ -102,7 +108,8 @@ function App() {
                   <Route path="performance" element={<AgentPerformance />} />
                   <Route path="performance/:category" element={<CategoryDetails />} />
                   <Route path="complaint" element={<AgentComplaintPage />} />
-
+                  <Route path="team" element={<TeamActivity />} />
+                  <Route path="team/:memberId" element={<TeamAgentDetail />} />
                 </Routes>
               </ProtectedRoute>
             } />

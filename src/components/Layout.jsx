@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useLocationTracker from '../hooks/useLocationTracker';
 import NotificationBell from './NotificationBell';
@@ -21,6 +22,19 @@ const Layout = ({ children }) => {
     const [selectedQueryId, setSelectedQueryId] = React.useState(null);
     const [selectedChatContext, setSelectedChatContext] = React.useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+    const [isSeniorAgent, setIsSeniorAgent] = useState(user?.is_senior_agent || false);
+
+    // Live-check senior agent status so sidebar updates without needing re-login
+    useEffect(() => {
+        if (user?.role !== 'agent' || !user?.id) return;
+        supabase
+            .from('senior_agents')
+            .select('id')
+            .eq('agent_id', user.id)
+            .eq('is_activated', true)
+            .maybeSingle()
+            .then(({ data }) => setIsSeniorAgent(!!data));
+    }, [user?.id]);
 
     // Active Location Tracking
     useLocationTracker();
@@ -35,13 +49,17 @@ const Layout = ({ children }) => {
     const getNavItems = () => {
         const role = user?.role || localStorage.getItem('role');
         if (role === 'agent') {
-            return [
-                { icon: LayoutDashboard, label: 'Dashboard', to: '/agent/dashboard' },
-                { icon: User, label: 'My Customers', to: '/agent/customers' },
-                { icon: FileText, label: 'Log Visit', to: '/agent/visit' },
-                { icon: Calendar, label: 'Performance', to: '/agent/performance' },
-                { icon: MessageSquare, label: 'Complaint', to: '/agent/complaint' },
+            const base = [
+                { icon: LayoutDashboard, label: 'Dashboard',    to: '/agent/dashboard' },
+                { icon: User,            label: 'My Customers', to: '/agent/customers' },
+                { icon: FileText,        label: 'Log Visit',    to: '/agent/visit' },
+                { icon: Calendar,        label: 'Performance',  to: '/agent/performance' },
+                { icon: MessageSquare,   label: 'Complaint',    to: '/agent/complaint' },
             ];
+            if (isSeniorAgent) {
+                base.push({ icon: Star, label: 'Team Activity', to: '/agent/team' });
+            }
+            return base;
         } else if (role === 'customer') {
             return [
                 { icon: LayoutDashboard, label: 'Dashboard', to: '/customer/dashboard' },

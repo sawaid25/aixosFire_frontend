@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
+import { useAuth } from '../../context/AuthContext';
+import { API_URL } from '../../api/client';
 import PageLoader from '../../components/PageLoader';
+import { toast } from 'react-hot-toast';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, AreaChart, Area, Legend
@@ -9,7 +12,8 @@ import {
 import {
     ArrowLeft, User, Phone, MapPin, Calendar, CheckCircle,
     Clock, XCircle, Activity, AlertTriangle, Award,
-    TrendingUp, TrendingDown, Eye, Target, Zap, Timer, MessageSquare
+    TrendingUp, TrendingDown, Eye, Target, Zap, Timer, MessageSquare,
+    Star, Users, Search, X, UserCheck, Trash2, Shield, Mail, RefreshCw
 } from 'lucide-react';
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
@@ -165,6 +169,275 @@ const BmBar = ({ barFillPct, withinBenchmark, status }) => {
 };
 
 /* ══════════════════════════════════════════════════════════
+   SENIOR AGENT MODAL
+══════════════════════════════════════════════════════════ */
+const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, onSuccess }) => {
+    const { user } = useAuth();
+    const [allAgents, setAllAgents]       = useState([]);
+    const [search, setSearch]             = useState('');
+    const [selected, setSelected]         = useState([]);   // array of agent objects
+    const [loadingAgents, setLoadingAgents] = useState(false);
+    const [submitting, setSubmitting]     = useState(false);
+    const [confirmRemove, setConfirmRemove] = useState(false);
+    const searchRef = useRef(null);
+
+    // Load all agents (excluding the target) when modal opens
+    useEffect(() => {
+        if (!isOpen) return;
+        setSearch('');
+        setConfirmRemove(false);
+        const load = async () => {
+            setLoadingAgents(true);
+            try {
+                const { data } = await supabase
+                    .from('agents')
+                    .select('id, name, email, status, profile_photo, territory')
+                    .eq('status', 'accepted')
+                    .neq('id', targetAgent.id)
+                    .order('name');
+                setAllAgents(data || []);
+
+                // Pre-select current team members if re-opening modal
+                if (currentSeniorRecord) {
+                    const { data: teamData } = await supabase
+                        .from('senior_agent_teams')
+                        .select('agent_id, agents(id, name, email, status, profile_photo, territory)')
+                        .eq('senior_agent_id', currentSeniorRecord.id);
+                    setSelected((teamData || []).map(t => t.agents).filter(Boolean));
+                } else {
+                    setSelected([]);
+                }
+            } finally {
+                setLoadingAgents(false);
+            }
+        };
+        load();
+        setTimeout(() => searchRef.current?.focus(), 100);
+    }, [isOpen, targetAgent?.id, currentSeniorRecord]);
+
+    const filtered = allAgents.filter(a =>
+        a.name.toLowerCase().includes(search.toLowerCase()) ||
+        a.email.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const toggleAgent = (agent) => {
+        setSelected(prev => {
+            const exists = prev.find(a => a.id === agent.id);
+            if (exists) return prev.filter(a => a.id !== agent.id);
+            if (prev.length >= 10) { toast.error('Maximum 10 team members'); return prev; }
+            return [...prev, agent];
+        });
+    };
+
+    const handleSubmit = async () => {
+        setSubmitting(true);
+        try {
+            const res = await fetch(`${API_URL}/auth/promote-senior-agent`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    agentId: targetAgent.id,
+                    agentEmail: targetAgent.email,
+                    agentName: targetAgent.name,
+                    assignedAgentIds: selected.map(a => a.id),
+                    adminName: user?.name || 'Admin',
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Promotion failed');
+            toast.success('Agent promoted! Activation email sent.');
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleUpdateTeam = async () => {
+        if (!currentSeniorRecord) return;
+        setSubmitting(true);
+        try {
+            const res = await fetch(`${API_URL}/senior-agents/${currentSeniorRecord.id}/team`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignedAgentIds: selected.map(a => a.id) }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Update failed');
+            toast.success('Team updated successfully');
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRemoveSenior = async () => {
+        setSubmitting(true);
+        try {
+            const res = await fetch(`${API_URL}/senior-agents/agent/${targetAgent.id}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Remove failed');
+            toast.success('Senior agent status removed');
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setSubmitting(false);
+            setConfirmRemove(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    const isEdit = !!currentSeniorRecord;
+
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="p-6 pb-4 flex items-start justify-between border-b border-slate-100 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-amber-100 rounded-2xl">
+                            <Star size={18} className="text-amber-600" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900">
+                                {isEdit ? 'Manage Senior Agent Team' : 'Promote to Senior Agent'}
+                            </h3>
+                            <p className="text-sm text-slate-500 mt-0.5">
+                                {isEdit ? `Update team for ${targetAgent?.name}` : `Assign a team to ${targetAgent?.name}`}
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Selected pills */}
+                {selected.length > 0 && (
+                    <div className="px-6 py-3 border-b border-slate-100 flex-shrink-0">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                            Selected Team ({selected.length}/10)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {selected.map(a => (
+                                <span key={a.id} className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                                    {a.name}
+                                    <button onClick={() => toggleAgent(a)} className="text-amber-500 hover:text-amber-700 ml-0.5">
+                                        <X size={11} />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Search */}
+                <div className="px-6 py-3 border-b border-slate-100 flex-shrink-0">
+                    <div className="relative">
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            ref={searchRef}
+                            type="text"
+                            placeholder="Search agents by name or email…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-primary-400 outline-none text-sm"
+                        />
+                    </div>
+                </div>
+
+                {/* Agent list */}
+                <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
+                    {loadingAgents ? (
+                        <div className="flex items-center justify-center py-10">
+                            <div className="w-6 h-6 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <p className="text-center text-slate-400 text-sm py-8">No agents found.</p>
+                    ) : (
+                        filtered.map(agent => {
+                            const isChosen = !!selected.find(a => a.id === agent.id);
+                            return (
+                                <button
+                                    key={agent.id}
+                                    onClick={() => toggleAgent(agent)}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-2xl border-2 transition-all text-left ${isChosen ? 'border-amber-400 bg-amber-50' : 'border-slate-100 hover:border-slate-300 bg-white'}`}
+                                >
+                                    <div className="w-9 h-9 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                                        {agent.profile_photo
+                                            ? <img src={agent.profile_photo} alt={agent.name} className="w-full h-full object-cover" />
+                                            : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={16} /></div>
+                                        }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-slate-800 truncate">{agent.name}</p>
+                                        <p className="text-xs text-slate-400 truncate">{agent.email}</p>
+                                    </div>
+                                    {agent.territory && (
+                                        <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg hidden sm:block">{agent.territory}</span>
+                                    )}
+                                    {isChosen && <CheckCircle size={18} className="text-amber-500 flex-shrink-0" />}
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Footer actions */}
+                <div className="p-6 pt-4 border-t border-slate-100 flex-shrink-0 space-y-3">
+                    {isEdit && (
+                        confirmRemove ? (
+                            <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
+                                <p className="text-sm text-red-700 font-medium flex-1">Remove senior agent status from {targetAgent.name}?</p>
+                                <button onClick={handleRemoveSenior} disabled={submitting} className="px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg">
+                                    {submitting ? '…' : 'Confirm Remove'}
+                                </button>
+                                <button onClick={() => setConfirmRemove(false)} className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg">
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setConfirmRemove(true)} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                <Trash2 size={15} /> Remove Senior Agent Status
+                            </button>
+                        )
+                    )}
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={isEdit ? handleUpdateTeam : handleSubmit}
+                            disabled={submitting || (!isEdit && selected.length === 0)}
+                            className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {submitting ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <Star size={15} />
+                                    {isEdit ? 'Update Team' : 'Promote & Send Email'}
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ══════════════════════════════════════════════════════════
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════ */
 const AgentProfile = () => {
@@ -179,20 +452,56 @@ const AgentProfile = () => {
     const [inquiriesPage, setInquiriesPage] = useState(1);
     const [complaints, setComplaints]       = useState([]);
     const [complaintsLoading, setComplaintsLoading] = useState(false);
+    const [seniorRecord, setSeniorRecord]       = useState(null);
+    const [showSeniorModal, setShowSeniorModal] = useState(false);
+    const [resending, setResending]             = useState(false);
+
+    const resendActivationEmail = async () => {
+        if (!seniorRecord || resending) return;
+        setResending(true);
+        try {
+            const res  = await fetch(`${API_URL}/auth/promote-senior-agent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
+                body: JSON.stringify({
+                    agentId: id,
+                    teamAgentIds: [],
+                    resendOnly: true,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success('Activation email resent successfully.');
+                const { data: sa } = await supabase.from('senior_agents').select('id,is_activated,promoted_by,created_at').eq('agent_id', id).maybeSingle();
+                setSeniorRecord(sa || null);
+            } else {
+                toast.error(data.error || 'Failed to resend email.');
+            }
+        } catch {
+            toast.error('Network error. Please try again.');
+        } finally {
+            setResending(false);
+        }
+    };
 
     useEffect(() => {
         const load = async () => {
             setLoading(true);
             try {
-                const [{ data: agentData }, { data: inqData }] = await Promise.all([
+                const [{ data: agentData }, { data: inqData }, { data: saData }] = await Promise.all([
                     supabase.from('agents').select('*').eq('id', id).maybeSingle(),
                     supabase.from('inquiries')
                         .select('id,inquiry_no,type,status,created_at,follow_up_date,updated_at,customers(id,business_name,address)')
                         .eq('agent_id', id)
                         .order('created_at', { ascending: false }),
+                    supabase.from('senior_agents').select('id,is_activated,promoted_by,created_at').eq('agent_id', id).maybeSingle(),
                 ]);
                 setAgent(agentData);
                 setInquiries(inqData || []);
+                setSeniorRecord(saData || null);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -364,11 +673,36 @@ const AgentProfile = () => {
                                 <h2 className="text-xl font-display font-bold text-slate-900">{agent.name}</h2>
                                 <p className="text-sm text-slate-500 mt-0.5">{agent.email}</p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <PerformanceBadge score={metrics.score} />
                                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${['accepted', 'active'].includes((agent.status || '').toLowerCase()) ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
                                     {agent.status || 'Unknown'}
                                 </span>
+                                {seniorRecord && (
+                                    <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${seniorRecord.is_activated ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                                        <Star size={11} /> {seniorRecord.is_activated ? 'Senior Agent' : 'Senior (Pending)'}
+                                    </span>
+                                )}
+                                <button
+                                    onClick={() => setShowSeniorModal(true)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${seniorRecord ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200' : 'bg-slate-900 text-white hover:bg-slate-700'}`}
+                                >
+                                    <Star size={12} />
+                                    {seniorRecord ? 'Manage Team' : 'Make Senior Agent'}
+                                </button>
+                                {seniorRecord && !seniorRecord.is_activated && (
+                                    <button
+                                        onClick={resendActivationEmail}
+                                        disabled={resending}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 disabled:opacity-60"
+                                    >
+                                        {resending
+                                            ? <RefreshCw size={12} className="animate-spin" />
+                                            : <Mail size={12} />
+                                        }
+                                        Resend Activation
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-4 mt-4 text-sm text-slate-500">
@@ -776,6 +1110,18 @@ const AgentProfile = () => {
                     </div>
                 </div>
             )}
+
+            {/* ══ SENIOR AGENT MODAL ══ */}
+            <SeniorAgentModal
+                isOpen={showSeniorModal}
+                onClose={() => setShowSeniorModal(false)}
+                targetAgent={agent}
+                currentSeniorRecord={seniorRecord}
+                onSuccess={async () => {
+                    const { data } = await supabase.from('senior_agents').select('id,is_activated,promoted_by,created_at').eq('agent_id', id).maybeSingle();
+                    setSeniorRecord(data || null);
+                }}
+            />
 
             {/* ══ COMPLAINTS & ISSUES TAB ══ */}
             {activeTab === 'complaints' && (

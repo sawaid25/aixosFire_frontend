@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- context exports Provider and useAuth */
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { API_URL } from '../api/client';
-import { AGENT_STATUS, agentLoginBlockedMessage, fetchAgentApprovalStatus } from '../constants/agentApprovalStatus';
+import { AGENT_STATUS, agentLoginBlockedMessage, fetchAgentApprovalStatus, fetchSeniorAgentStatus } from '../constants/agentApprovalStatus';
 
 export const AuthContext = createContext(undefined);
 
@@ -39,6 +39,9 @@ export const AuthProvider = ({ children }) => {
               clearSession();
               return;
             }
+            const isSeniorAgent = await fetchSeniorAgentStatus(parsed.id);
+            setUser({ ...parsed, role: storedRole, is_senior_agent: isSeniorAgent });
+            return;
           }
           setUser({ ...parsed, role: storedRole });
         }
@@ -96,7 +99,11 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('role', role);
       localStorage.setItem('token', result.token);
 
-      setUser({ ...result.user, role });
+      let isSeniorAgent = false;
+      if (role === 'agent') {
+        isSeniorAgent = await fetchSeniorAgentStatus(result.user.id);
+      }
+      setUser({ ...result.user, role, is_senior_agent: isSeniorAgent });
       return { success: true };
     } catch (err) {
       console.error('Login Error:', err);

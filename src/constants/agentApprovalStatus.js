@@ -16,6 +16,18 @@ export function agentLoginBlockedMessage(status) {
   return 'Account pending approval';
 }
 
+/** Returns true if the agent has an activated senior_agents record. */
+export async function fetchSeniorAgentStatus(agentId) {
+  if (!agentId) return false;
+  const { data } = await supabase
+    .from('senior_agents')
+    .select('id')
+    .eq('agent_id', agentId)
+    .eq('is_activated', true)
+    .maybeSingle();
+  return !!data;
+}
+
 /** Used after API login and on session restore (mirrors SELECT status FROM agents WHERE …). */
 export async function fetchAgentApprovalStatus({ id, email }) {
   if (id) {
