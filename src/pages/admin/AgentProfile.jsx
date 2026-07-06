@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { API_URL } from '../../api/client';
@@ -13,7 +13,7 @@ import {
     ArrowLeft, User, Phone, MapPin, Calendar, CheckCircle,
     Clock, XCircle, Activity, AlertTriangle, Award,
     TrendingUp, TrendingDown, Eye, Target, Zap, Timer, MessageSquare,
-    Star, Users, Search, X, UserCheck, Trash2, Shield, Mail, RefreshCw
+    Star, Users, Search, X, UserCheck, Trash2, Shield, Mail, RefreshCw, UserCog
 } from 'lucide-react';
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
@@ -438,10 +438,50 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
 };
 
 /* ══════════════════════════════════════════════════════════
+   LOGIN AS AGENT — CONFIRMATION MODAL
+══════════════════════════════════════════════════════════ */
+const LoginAsAgentModal = ({ isOpen, onClose, agentName, submitting, onConfirm }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2.5 bg-amber-100 rounded-2xl">
+                        <UserCog size={18} className="text-amber-600" />
+                    </div>
+                    <h3 className="text-lg font-black text-slate-900">Login as {agentName}?</h3>
+                </div>
+                <p className="text-sm text-slate-500 leading-relaxed mb-6">
+                    You'll temporarily view the app exactly as this agent, without their password. This action
+                    is logged and expires automatically after 45 minutes. You can return to your own account
+                    at any time via the banner shown while impersonating.
+                </p>
+                <div className="flex gap-3">
+                    <button onClick={onClose} className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={submitting}
+                        className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>
+                            <UserCog size={15} /> Login as Agent
+                        </>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ══════════════════════════════════════════════════════════
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════ */
 const AgentProfile = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
+    const { startImpersonation } = useAuth();
     const [searchParams] = useSearchParams();
     const [loading, setLoading]             = useState(true);
     const [agent, setAgent]                 = useState(null);
@@ -455,6 +495,23 @@ const AgentProfile = () => {
     const [seniorRecord, setSeniorRecord]       = useState(null);
     const [showSeniorModal, setShowSeniorModal] = useState(false);
     const [resending, setResending]             = useState(false);
+    const [showImpersonateConfirm, setShowImpersonateConfirm] = useState(false);
+    const [impersonating, setImpersonating]     = useState(false);
+
+    const handleLoginAsAgent = async () => {
+        setImpersonating(true);
+        try {
+            const result = await startImpersonation(id);
+            if (result.success) {
+                navigate('/agent/dashboard');
+            } else {
+                toast.error(result.error || 'Failed to start impersonation');
+            }
+        } finally {
+            setImpersonating(false);
+            setShowImpersonateConfirm(false);
+        }
+    };
 
     const resendActivationEmail = async () => {
         if (!seniorRecord || resending) return;
@@ -703,6 +760,15 @@ const AgentProfile = () => {
                                         Resend Activation
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => setShowImpersonateConfirm(true)}
+                                    disabled={!['accepted', 'active'].includes((agent.status || '').toLowerCase())}
+                                    title={!['accepted', 'active'].includes((agent.status || '').toLowerCase()) ? 'Only active/accepted agents can be impersonated' : undefined}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <UserCog size={12} />
+                                    Login as Agent
+                                </button>
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-4 mt-4 text-sm text-slate-500">
@@ -1121,6 +1187,15 @@ const AgentProfile = () => {
                     const { data } = await supabase.from('senior_agents').select('id,is_activated,promoted_by,created_at').eq('agent_id', id).maybeSingle();
                     setSeniorRecord(data || null);
                 }}
+            />
+
+            {/* ══ LOGIN AS AGENT MODAL ══ */}
+            <LoginAsAgentModal
+                isOpen={showImpersonateConfirm}
+                onClose={() => setShowImpersonateConfirm(false)}
+                agentName={agent.name}
+                submitting={impersonating}
+                onConfirm={handleLoginAsAgent}
             />
 
             {/* ══ COMPLAINTS & ISSUES TAB ══ */}

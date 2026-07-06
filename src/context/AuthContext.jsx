@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- context exports Provider and useAuth */
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { flushSync } from 'react-dom';
 import { API_URL } from '../api/client';
 import { AGENT_STATUS, agentLoginBlockedMessage, fetchAgentApprovalStatus, fetchSeniorAgentStatus } from '../constants/agentApprovalStatus';
 
@@ -16,6 +17,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [impersonation, setImpersonation] = useState(null); // null | { adminName, agentName, expiresAt }
 
   const clearSession = () => {
     localStorage.removeItem('user');
@@ -24,12 +26,36 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const clearImpersonationMeta = () => {
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_role');
+    localStorage.removeItem('impersonation_meta');
+    setImpersonation(null);
+  };
+
   // Load user from localStorage; block agent sessions when not accepted
   useEffect(() => {
     const init = async () => {
       try {
         const storedUser = localStorage.getItem('user');
         const storedRole = localStorage.getItem('role');
+        const storedMeta = localStorage.getItem('impersonation_meta');
+        if (storedMeta) {
+          try {
+            const meta = JSON.parse(storedMeta);
+            // Tab was closed/refreshed mid-impersonation — keep the admin in
+            // the impersonated view (don't silently drop them back to admin);
+            // the expiry/banner flow takes it from here.
+            if (meta.expiresAt && new Date(meta.expiresAt) > new Date()) {
+              setImpersonation(meta);
+            } else {
+              clearImpersonationMeta();
+            }
+          } catch {
+            clearImpersonationMeta();
+          }
+        }
         if (storedUser && storedRole) {
           const parsed = JSON.parse(storedUser);
           if (storedRole === 'agent') {
@@ -54,6 +80,36 @@ export const AuthProvider = ({ children }) => {
     };
     init();
   }, []);
+
+  // The API client dispatches this when a request comes back with
+  // code: 'IMPERSONATION_EXPIRED' — restore the admin's own session instead
+  // of a jarring full logout.
+  useEffect(() => {
+    const handleExpired = () => {
+      restoreAdminSession({ silent: true });
+    };
+    window.addEventListener('impersonation-expired', handleExpired);
+    return () => window.removeEventListener('impersonation-expired', handleExpired);
+  }, []);
+
+  const restoreAdminSession = ({ silent } = {}) => {
+    const adminToken = localStorage.getItem('admin_token');
+    const adminUser = localStorage.getItem('admin_user');
+    const adminRole = localStorage.getItem('admin_role');
+    if (!adminToken || !adminUser || !adminRole) {
+      clearImpersonationMeta();
+      if (!silent) clearSession();
+      return { success: false };
+    }
+    localStorage.setItem('token', adminToken);
+    localStorage.setItem('user', adminUser);
+    localStorage.setItem('role', adminRole);
+    flushSync(() => {
+      clearImpersonationMeta();
+      setUser({ ...JSON.parse(adminUser), role: adminRole });
+    });
+    return { success: true };
+  };
 
   // LOGIN
   const login = async (email, password, role) => {
@@ -155,13 +211,76 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // LOGOUT
+  // LOGOUT — signing out while impersonating ends the whole thing, not just
+  // a "return to admin" (that's what the dedicated banner button is for).
   const logout = () => {
+    if (impersonation) {
+      fetch(`${API_URL}/auth/impersonate/end`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      }).catch(() => {});
+      clearImpersonationMeta();
+    }
     clearSession();
   };
 
+  // IMPERSONATION: start "Login as Agent"
+  const startImpersonation = async (agentId) => {
+    if (user?.role !== 'admin') return { success: false, error: 'Only admins can do this.' };
+    try {
+      const response = await fetch(`${API_URL}/auth/impersonate/${agentId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      const result = await response.json();
+      if (!response.ok) return { success: false, error: result.error || 'Failed to start impersonation' };
+
+      // Stash the admin's real session so "Return to Admin" needs no re-login.
+      localStorage.setItem('admin_token', localStorage.getItem('token'));
+      localStorage.setItem('admin_user', localStorage.getItem('user'));
+      localStorage.setItem('admin_role', localStorage.getItem('role'));
+
+      const meta = { adminName: result.adminName, agentName: result.agent.name, expiresAt: result.expiresAt };
+      localStorage.setItem('impersonation_meta', JSON.stringify(meta));
+
+      localStorage.setItem('token', result.impersonationToken);
+      localStorage.setItem('user', JSON.stringify(result.agent));
+      localStorage.setItem('role', 'agent');
+
+      const isSeniorAgent = await fetchSeniorAgentStatus(result.agent.id);
+      // flushSync: the caller navigates immediately after this resolves, and
+      // ProtectedRoute reads `user` from context on that very next render.
+      // Without a synchronous flush, the route change can commit before this
+      // state update does, so ProtectedRoute sees the stale (admin) user,
+      // fails the agent-only check, and redirects away before the correct
+      // state ever renders.
+      flushSync(() => {
+        setImpersonation(meta);
+        setUser({ ...result.agent, role: 'agent', is_senior_agent: isSeniorAgent });
+      });
+      return { success: true };
+    } catch (err) {
+      console.error('Impersonation start error:', err);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  };
+
+  // IMPERSONATION: "Return to Admin"
+  const endImpersonation = async () => {
+    if (!impersonation) return { success: false };
+    try {
+      await fetch(`${API_URL}/auth/impersonate/end`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+    } catch (err) {
+      console.error('Impersonation end error:', err);
+    }
+    return restoreAdminSession();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, loading, impersonation, startImpersonation, endImpersonation }}>
       {!loading && children}
     </AuthContext.Provider>
   );

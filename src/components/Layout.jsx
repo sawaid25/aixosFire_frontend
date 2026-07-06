@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star } from 'lucide-react';
+import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useLocationTracker from '../hooks/useLocationTracker';
 import NotificationBell from './NotificationBell';
@@ -14,8 +14,42 @@ const SidebarItem = ({ icon: Icon, label, to, active }) => (
     </Link>
 );
 
+const ImpersonationBanner = ({ impersonation, onReturnToAdmin }) => {
+    const [remaining, setRemaining] = useState('');
+
+    useEffect(() => {
+        if (!impersonation?.expiresAt) return;
+        const tick = () => {
+            const diffMs = new Date(impersonation.expiresAt) - new Date();
+            if (diffMs <= 0) { setRemaining('0:00'); return; }
+            const mins = Math.floor(diffMs / 60000);
+            const secs = Math.floor((diffMs % 60000) / 1000);
+            setRemaining(`${mins}:${String(secs).padStart(2, '0')}`);
+        };
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [impersonation?.expiresAt]);
+
+    return (
+        <div className="bg-amber-500 text-amber-950 px-4 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-bold text-center z-40 relative">
+            <UserCog size={16} className="flex-shrink-0" />
+            <span>
+                Viewing as <strong>{impersonation.agentName}</strong> — impersonated by <strong>{impersonation.adminName}</strong>
+                {remaining && <span className="font-normal opacity-80"> · {remaining} remaining</span>}
+            </span>
+            <button
+                onClick={onReturnToAdmin}
+                className="bg-amber-950 text-amber-50 px-3 py-1 rounded-lg text-xs font-black hover:bg-amber-900 transition-colors"
+            >
+                Return to Admin
+            </button>
+        </div>
+    );
+};
+
 const Layout = ({ children }) => {
-    const { user, logout } = useAuth();
+    const { user, logout, impersonation, endImpersonation } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [isChatOpen, setIsChatOpen] = React.useState(false);
@@ -23,6 +57,11 @@ const Layout = ({ children }) => {
     const [selectedChatContext, setSelectedChatContext] = React.useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const [isSeniorAgent, setIsSeniorAgent] = useState(user?.is_senior_agent || false);
+
+    const handleReturnToAdmin = async () => {
+        const result = await endImpersonation();
+        if (result?.success) navigate('/admin/agents');
+    };
 
     // Live-check senior agent status so sidebar updates without needing re-login
     useEffect(() => {
@@ -99,7 +138,9 @@ const Layout = ({ children }) => {
     };
 
     return (
-        <div className="flex h-screen bg-slate-50 font-sans">
+        <div className="flex flex-col h-screen bg-slate-50 font-sans">
+            {impersonation && <ImpersonationBanner impersonation={impersonation} onReturnToAdmin={handleReturnToAdmin} />}
+            <div className="flex flex-1 min-h-0">
             {/* Mobile Sidebar Overlay */}
             {isMobileMenuOpen && (
                 <div 
@@ -281,6 +322,7 @@ const Layout = ({ children }) => {
                         {children}
                     </div>
                 </main>
+            </div>
             </div>
 
             <ChatModal

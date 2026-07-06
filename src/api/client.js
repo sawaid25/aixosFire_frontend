@@ -75,4 +75,14 @@ client.interceptors.request.use(
     }
 );
 
+client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.data?.code === 'IMPERSONATION_EXPIRED') {
+            window.dispatchEvent(new CustomEvent('impersonation-expired'));
+        }
+        return Promise.reject(error);
+    }
+);
+
 export default client;
