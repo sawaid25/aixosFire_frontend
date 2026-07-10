@@ -1,15 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { Search, MapPin, Phone, ArrowRight, User, Plus } from 'lucide-react';
+import { Search, MapPin, Phone, ArrowRight, User, Plus, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageLoader from "../../components/PageLoader";
+
+const getTimeBounds = (period) => {
+    const now = new Date();
+    if (period === 'today') {
+        const start = new Date(now); start.setHours(0, 0, 0, 0);
+        return { start, end: now };
+    }
+    if (period === 'week') {
+        const start = new Date(now);
+        start.setDate(now.getDate() - now.getDay());
+        start.setHours(0, 0, 0, 0);
+        return { start, end: now };
+    }
+    if (period === 'month') {
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+    }
+    return null;
+};
 
 const Customers = () => {
     const { user } = useAuth();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [timePeriod, setTimePeriod] = useState('all');
 
     useEffect(() => {
         const fetchCustomers = async () => {
@@ -40,6 +59,23 @@ const Customers = () => {
                     }
                 });
 
+                // Mark customers who have a pending follow-up validation item
+                const customerIds = uniqueCustomers.map(c => c.id);
+                if (customerIds.length > 0) {
+                    const { data: followUps, error: followUpErr } = await supabase
+                        .from('inquiry_items')
+                        .select('customer_id')
+                        .in('customer_id', customerIds)
+                        .eq('validation_mode', 'followup');
+
+                    if (followUpErr) throw followUpErr;
+
+                    const followUpIds = new Set((followUps || []).map(f => f.customer_id));
+                    uniqueCustomers.forEach(c => {
+                        c.hasFollowUp = followUpIds.has(c.id);
+                    });
+                }
+
                 setCustomers(uniqueCustomers);
             } catch (err) {
                 console.error("Failed to fetch customers", err);
@@ -51,11 +87,22 @@ const Customers = () => {
         if (user) fetchCustomers();
     }, [user]);
 
-    const filteredCustomers = customers.filter(c =>
-        c.business_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone?.includes(searchTerm) ||
-        c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredCustomers = customers.filter(c => {
+        const matchesSearch =
+            c.business_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            c.phone?.includes(searchTerm) ||
+            c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+
+        const bounds = getTimeBounds(timePeriod);
+        if (bounds) {
+            if (!c.last_visit) return false;
+            const visitDate = new Date(c.last_visit);
+            if (visitDate < bounds.start || visitDate > bounds.end) return false;
+        }
+
+        return true;
+    });
 
     return (
         <div className="relative min-h-[400px] space-y-6">
@@ -80,6 +127,24 @@ const Customers = () => {
                 </div>
             </div>
 
+            {/* Time Period Filters */}
+            <div className="flex flex-wrap gap-2">
+                {[
+                    { key: 'all', label: 'All Time' },
+                    { key: 'today', label: 'Today' },
+                    { key: 'week', label: 'This Week' },
+                    { key: 'month', label: 'This Month' },
+                ].map(({ key, label }) => (
+                    <button
+                        key={key}
+                        onClick={() => setTimePeriod(key)}
+                        className={`text-xs px-4 py-2 rounded-xl font-semibold transition-colors ${timePeriod === key ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-600'}`}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+
             {/* Empty State */}
             {!loading && filteredCustomers.length === 0 && (
                 <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -87,10 +152,16 @@ const Customers = () => {
                         <User size={32} />
                     </div>
                     <h3 className="text-lg font-bold text-slate-900">No Customers Found</h3>
-                    <p className="text-slate-500 mb-6">You haven't logged any visits yet.</p>
-                    <Link to="/agent/visit" className="btn-primary inline-flex items-center gap-2">
-                        <Plus size={20} /> Log First Visit
-                    </Link>
+                    {customers.length === 0 ? (
+                        <>
+                            <p className="text-slate-500 mb-6">You haven't logged any visits yet.</p>
+                            <Link to="/agent/visit" className="btn-primary inline-flex items-center gap-2">
+                                <Plus size={20} /> Log First Visit
+                            </Link>
+                        </>
+                    ) : (
+                        <p className="text-slate-500">No customers match the selected filter or search.</p>
+                    )}
                 </div>
             )}
 
@@ -121,7 +192,17 @@ const Customers = () => {
                                                 {customer.owner_name || "N/A"}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-900">{customer.business_name}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-slate-900">{customer.business_name}</span>
+                                                    {customer.hasFollowUp && (
+                                                        <span
+                                                            title="Pending follow-up validation"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"
+                                                        >
+                                                            <RefreshCw size={10} /> Follow-up
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
                                                     <Phone size={12} /> {customer.phone || "N/A"}
                                                 </div>
@@ -166,8 +247,18 @@ const Customers = () => {
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
                                         <div className="text-xs text-slate-500">ID: {customer.id}</div>
-                                        <div className="font-bold text-xl text-slate-900 mt-1">
-                                            {customer.business_name}
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <div className="font-bold text-xl text-slate-900">
+                                                {customer.business_name}
+                                            </div>
+                                            {customer.hasFollowUp && (
+                                                <span
+                                                    title="Pending follow-up validation"
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"
+                                                >
+                                                    <RefreshCw size={10} /> Follow-up
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="text-sm text-slate-600 mt-1">
                                             {customer.owner_name || "N/A"}

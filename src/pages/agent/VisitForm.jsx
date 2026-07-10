@@ -417,7 +417,7 @@ const VisitForm = () => {
                 : item
             )
           );
-        }, 2000); // 2 seconds debounce
+        }, 8000); // 8 seconds debounce — gives the agent time to fill Type/Capacity/Partner/Photo before auto-lock
       }
     });
     return () => debounceTimers.current.forEach(timer => clearTimeout(timer));
@@ -534,6 +534,9 @@ const VisitForm = () => {
       }
 
       // 1. Persist updated customer info
+      // location_lat/lng only included when the agent fetched them via the
+      // location icon this session — a plain manual address edit leaves
+      // whatever coordinates (if any) already saved on the customer untouched.
       const { error: updateErr } = await supabase
         .from('customers')
         .update({
@@ -544,6 +547,9 @@ const VisitForm = () => {
           address: formData.address || null,
           business_type: finalBusinessType,
           last_updated: new Date().toISOString(),
+          ...(formData.lat != null && formData.lng != null
+            ? { location_lat: formData.lat, location_lng: formData.lng }
+            : {}),
         })
         .eq('id', custId);
 
@@ -723,10 +729,13 @@ const VisitForm = () => {
 
   // Directly calls getCurrentPosition — use only when permission is known to be
   // "granted" or "prompt" (the latter triggers the native browser popup).
-  const doFetchLocation = () => {
+  // `highAccuracy` is retried automatically once if the first (network-based)
+  // attempt times out — desktop Chrome's network location provider can be
+  // slow/unreachable, while GPS/OS-level location often still works.
+  const doFetchLocation = (highAccuracy = false) => {
     setLocationModal({ open: false, type: null });
     setIsFetchingLocation(true);
-    console.log('[Location] calling getCurrentPosition…');
+    console.log('[Location] calling getCurrentPosition… highAccuracy:', highAccuracy);
 
     try {
       navigator.geolocation.getCurrentPosition(
@@ -764,8 +773,16 @@ const VisitForm = () => {
           }
         },
         (err) => {
+          console.warn('[Location] error:', err.code, err.message, 'highAccuracy:', highAccuracy);
+
+          // First attempt (network-based) timed out or had no fix — retry once
+          // with high accuracy (GPS/OS location) before giving up.
+          if (!highAccuracy && (err.code === 2 || err.code === 3)) {
+            doFetchLocation(true);
+            return;
+          }
+
           setIsFetchingLocation(false);
-          console.warn('[Location] error:', err.code, err.message);
           setFormData(prev => ({ ...prev, address: prev.address || '' }));
 
           if (err.code === 1 /* PERMISSION_DENIED */) {
@@ -777,10 +794,12 @@ const VisitForm = () => {
           }
         },
         {
-          // false = use WiFi/cell/IP instead of GPS — instant on desktop, fast on mobile
-          enableHighAccuracy: false,
-          // 8 s is plenty for network-based location; GPS-based can need 15+ s
-          timeout: 8000,
+          // Retry (highAccuracy=true) taps GPS/OS location instead of WiFi/cell/IP —
+          // slower to acquire but works in more environments (e.g. desktop dev
+          // machines where the network location provider is unreachable).
+          enableHighAccuracy: highAccuracy,
+          // 15 s gives real GPS fixes room to complete; network-based is usually instant anyway
+          timeout: highAccuracy ? 20000 : 15000,
           // accept a cached position up to 30 s old to avoid redundant fetches
           maximumAge: 30000,
         }
@@ -949,6 +968,10 @@ const VisitForm = () => {
             address: formData.address || null,
             business_type: finalBusinessType,
             status: 'Lead',
+            // Only set when fetched via the location icon — a manually typed
+            // address leaves these null (filled later when the customer logs in).
+            location_lat: formData.lat ?? null,
+            location_lng: formData.lng ?? null,
           }])
           .select()
           .single();
@@ -1260,8 +1283,11 @@ const VisitForm = () => {
   };
 
   const handleSubmit = async () => {
+    // Follow-up validation items carry an optional partner (may be left blank),
+    // unlike other modes where a partner is mandatory — included here so a
+    // partner picked on a follow-up item still counts toward the "same
+    // partner across items" check below, but a blank one is simply ignored.
     const partnerValues = extinguishers
-      .filter(ext => !(ext.mode === 'Validation' && ext.validation_mode === 'followup'))
       .map(ext => {
         if (ext.partner === 'Other') {
           return ext.customPartner?.trim() ? `custom:${ext.customPartner.trim().toLowerCase()}` : null;
@@ -1336,6 +1362,10 @@ const VisitForm = () => {
             business_type: finalBusinessType,
             status: 'Lead',
             image_url: imageUrl,
+            // Only set when fetched via the location icon — a manually typed
+            // address leaves these null (filled later when the customer logs in).
+            location_lat: formData.lat ?? null,
+            location_lng: formData.lng ?? null,
           }])
           .select();
 
@@ -1399,6 +1429,9 @@ const VisitForm = () => {
           business_type: finalBusinessType,
           ...(imageUrl && { image_url: imageUrl }),
           last_updated: new Date().toISOString(),
+          ...(formData.lat != null && formData.lng != null
+            ? { location_lat: formData.lat, location_lng: formData.lng }
+            : {}),
         }).eq('id', finalCustId);
       }
 
@@ -1427,7 +1460,7 @@ const VisitForm = () => {
           notes: formData.notes,
           risk_assessment: formData.riskAssessment,
           service_recommendations: formData.serviceRecommendations,
-          follow_up_date: formData.followUpDate,
+          follow_up_date: formData.followUpDate || null,
           status: 'Completed',
           task_types: taskTypes // Maintenance, Refilling, New Queries
         }])
@@ -1454,7 +1487,15 @@ const VisitForm = () => {
       const inquiryType = extinguishers[0]?.mode || 'General';
       const selectedPartnerId = uniquePartners[0] || null;
 
-      if (inquiryTypeNeedsPartner(inquiryType) && !selectedPartnerId) {
+      // Follow-up validation items don't require a partner — only enforce the
+      // requirement if at least one item actually needs one (e.g. a new
+      // validation or a refill).
+      const hasItemRequiringPartner = extinguishers.some(ext =>
+        !(ext.mode === 'Validation' && ext.validation_mode === 'followup') &&
+        inquiryTypeNeedsPartner(ext.mode)
+      );
+
+      if (hasItemRequiringPartner && !selectedPartnerId) {
         toast.error('Please select a partner before creating inquiry');
         setLoading(false);
         return;
@@ -2391,16 +2432,33 @@ const VisitForm = () => {
                           />
                         </>
                       ) : (
-                        <div className="md:col-span-4">
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Follow-up Date</label>
-                          <input
-                            type="date"
-                            required
-                            value={ext.validationFollowUpDate || ''}
-                            onChange={(e) => handleExtinguisherChange(index, 'validationFollowUpDate', e.target.value)}
-                            className="input-field py-3 text-sm"
-                          />
-                        </div>
+                        <>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                              Partner <span className="normal-case text-slate-400">(optional)</span>
+                            </label>
+                            <select
+                              value={ext.partner || ''}
+                              onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
+                              className="input-field py-2 text-sm"
+                            >
+                              <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
+                              {partners.map(p => (
+                                <option key={p.id} value={p.id}>{p.business_name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="md:col-span-3">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Follow-up Date</label>
+                            <input
+                              type="date"
+                              required
+                              value={ext.validationFollowUpDate || ''}
+                              onChange={(e) => handleExtinguisherChange(index, 'validationFollowUpDate', e.target.value)}
+                              className="input-field py-3 text-sm"
+                            />
+                          </div>
+                        </>
                       )}
                     </>
                   )}

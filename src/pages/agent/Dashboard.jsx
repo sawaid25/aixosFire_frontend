@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { MapPin, Users, CheckCircle, DollarSign, TrendingUp, MessageSquare, Calendar, Eye, ArrowRight } from 'lucide-react';
+import { MapPin, Users, CheckCircle, DollarSign, TrendingUp, MessageSquare, Calendar, Eye, ArrowRight, Phone } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -87,8 +87,10 @@ const AgentDashboard = () => {
   const [stats, setStats] = useState({ totalVisits: 0, conversions: 0, earnings: 0, chartData: [] });
   const [visits, setVisits] = useState([]);
   const [queries, setQueries] = useState([]);
+  const [recentCustomers, setRecentCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingQueries, setLoadingQueries] = useState(true);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
   const [activeTab, setActiveTab] = useState('Monthly');
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -225,6 +227,45 @@ const AgentDashboard = () => {
     };
 
     fetchQueries();
+  }, [user]);
+
+  // Fetch Recent Customers — only customers this agent has actually visited
+  useEffect(() => {
+    const fetchRecentCustomers = async () => {
+      if (!user) return;
+      try {
+        setLoadingCustomers(true);
+        const { data, error } = await supabase
+          .from('visits')
+          .select(`
+            customer_id,
+            visit_date,
+            customers (id, business_name, owner_name, phone, address, status)
+          `)
+          .eq('agent_id', user.id)
+          .order('visit_date', { ascending: false });
+
+        if (error) throw error;
+
+        // Dedupe by customer_id, keeping the most recent visit (list is already sorted desc)
+        const seen = new Set();
+        const unique = [];
+        (data || []).forEach((v) => {
+          if (v.customers && !seen.has(v.customer_id)) {
+            seen.add(v.customer_id);
+            unique.push({ ...v.customers, last_visit: v.visit_date });
+          }
+        });
+
+        setRecentCustomers(unique.slice(0, 5));
+      } catch (err) {
+        console.error('Failed to fetch recent customers:', err);
+      } finally {
+        setLoadingCustomers(false);
+      }
+    };
+
+    fetchRecentCustomers();
   }, [user]);
 
   // Geolocation
@@ -419,6 +460,117 @@ const AgentDashboard = () => {
           ) : (
             queries.map((query) => (
               <QueryCard key={query.id} query={query} />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Recent Customers Section */}
+      <div className="bg-white rounded-3xl shadow-soft border border-slate-100 p-6 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <Users size={22} className="text-primary-500" /> Recent Customers
+          </h3>
+          <Link to="/agent/customers" className="text-sm font-semibold text-primary-600 hover:underline flex items-center gap-1">
+            View All <ArrowRight size={14} />
+          </Link>
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-100">
+                <th className="px-6 py-4">Business</th>
+                <th className="px-6 py-4">Contact</th>
+                <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4">Last Visit</th>
+                <th className="px-6 py-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loadingCustomers ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center">
+                    <div className="flex justify-center">
+                      <div className="animate-spin h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+                    </div>
+                  </td>
+                </tr>
+              ) : recentCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-slate-500 italic">
+                    You haven't visited any customers yet.
+                  </td>
+                </tr>
+              ) : (
+                recentCustomers.map((customer) => (
+                  <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-900">{customer.business_name}</div>
+                      <div className="text-xs text-slate-400">{customer.owner_name || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        <Phone size={14} className="text-slate-400" /> {customer.phone || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={14} className="text-slate-400" /> {customer.address || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Link
+                        to={`/agent/customer/${customer.id}`}
+                        className="inline-flex items-center justify-center p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
+                      >
+                        <Eye size={18} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="block md:hidden space-y-4">
+          {loadingCustomers ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+            </div>
+          ) : recentCustomers.length === 0 ? (
+            <p className="text-center py-12 text-slate-500 italic">You haven't visited any customers yet.</p>
+          ) : (
+            recentCustomers.map((customer) => (
+              <div key={customer.id} className="border border-slate-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="font-bold text-slate-900">{customer.business_name}</p>
+                    <p className="text-xs text-slate-400">{customer.owner_name || 'N/A'}</p>
+                  </div>
+                  <Link
+                    to={`/agent/customer/${customer.id}`}
+                    className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
+                  >
+                    <Eye size={18} />
+                  </Link>
+                </div>
+                <div className="text-sm text-slate-600 flex items-center gap-1.5 mt-2">
+                  <Phone size={14} className="text-slate-400" /> {customer.phone || 'N/A'}
+                </div>
+                <div className="text-sm text-slate-600 flex items-center gap-1.5 mt-1">
+                  <MapPin size={14} className="text-slate-400" /> {customer.address || 'N/A'}
+                </div>
+                <div className="text-xs text-slate-400 mt-2">
+                  Last visit: {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}
+                </div>
+              </div>
             ))
           )}
         </div>

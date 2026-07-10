@@ -54,7 +54,18 @@ export async function createInquiryViaSupabase(inquiryData, items) {
   }
 
   const normalizedType = normalizeStickerUsedFor(inquiryData?.type);
-  if (normalizedType && !inquiryData?.partner_id) {
+
+  // A validation inquiry made up entirely of follow-up items doesn't consume
+  // a partner sticker (it's a re-check of an already-validated unit, not a
+  // fresh validation), so a partner isn't mandatory for it — unlike a new
+  // validation or a refill, which always requires one.
+  const itemsArr = Array.isArray(items) ? items : [];
+  const isFollowupOnlyValidation =
+    normalizedType === 'validation' &&
+    itemsArr.length > 0 &&
+    itemsArr.every((it) => (it.validation_mode ?? 'new') === 'followup');
+
+  if (normalizedType && !inquiryData?.partner_id && !isFollowupOnlyValidation) {
     const err = new Error('Partner is required for this inquiry type');
     err.status = 400;
     throw err;
