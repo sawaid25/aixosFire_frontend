@@ -234,7 +234,10 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
         try {
             const res = await fetch(`${API_URL}/auth/promote-senior-agent`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
                 body: JSON.stringify({
                     agentId: targetAgent.id,
                     agentEmail: targetAgent.email,
@@ -261,7 +264,10 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
         try {
             const res = await fetch(`${API_URL}/senior-agents/${currentSeniorRecord.id}/team`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
                 body: JSON.stringify({ assignedAgentIds: selected.map(a => a.id) }),
             });
             const data = await res.json();
@@ -281,6 +287,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
         try {
             const res = await fetch(`${API_URL}/senior-agents/agent/${targetAgent.id}`, {
                 method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Remove failed');

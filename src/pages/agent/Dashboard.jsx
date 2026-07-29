@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { MapPin, Users, CheckCircle, DollarSign, TrendingUp, MessageSquare, Calendar, Eye, ArrowRight, Phone } from 'lucide-react';
+import { MapPin, Users, CheckCircle, DollarSign, TrendingUp, MessageSquare, Calendar, Eye, ArrowRight, Phone, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -240,7 +240,7 @@ const AgentDashboard = () => {
           .select(`
             customer_id,
             visit_date,
-            customers (id, business_name, owner_name, phone, address, status)
+            customers (id, business_name, owner_name, phone, address, status, created_at)
           `)
           .eq('agent_id', user.id)
           .order('visit_date', { ascending: false });
@@ -257,7 +257,26 @@ const AgentDashboard = () => {
           }
         });
 
-        setRecentCustomers(unique.slice(0, 5));
+        const recent = unique.slice(0, 5);
+
+        // Mark customers who have a pending follow-up validation item
+        const customerIds = recent.map((c) => c.id);
+        if (customerIds.length > 0) {
+          const { data: followUps, error: followUpErr } = await supabase
+            .from('inquiry_items')
+            .select('customer_id')
+            .in('customer_id', customerIds)
+            .eq('validation_mode', 'followup');
+
+          if (followUpErr) throw followUpErr;
+
+          const followUpIds = new Set((followUps || []).map((f) => f.customer_id));
+          recent.forEach((c) => {
+            c.hasFollowUp = followUpIds.has(c.id);
+          });
+        }
+
+        setRecentCustomers(recent);
       } catch (err) {
         console.error('Failed to fetch recent customers:', err);
       } finally {
@@ -484,6 +503,7 @@ const AgentDashboard = () => {
                 <th className="px-6 py-4">Business</th>
                 <th className="px-6 py-4">Contact</th>
                 <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4">Created At</th>
                 <th className="px-6 py-4">Last Visit</th>
                 <th className="px-6 py-4 text-right">Action</th>
               </tr>
@@ -491,7 +511,7 @@ const AgentDashboard = () => {
             <tbody className="divide-y divide-slate-50">
               {loadingCustomers ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center">
+                  <td colSpan="6" className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full" />
                     </div>
@@ -499,7 +519,7 @@ const AgentDashboard = () => {
                 </tr>
               ) : recentCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-slate-500 italic">
+                  <td colSpan="6" className="px-6 py-12 text-center text-slate-500 italic">
                     You haven't visited any customers yet.
                   </td>
                 </tr>
@@ -507,7 +527,17 @@ const AgentDashboard = () => {
                 recentCustomers.map((customer) => (
                   <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-slate-900">{customer.business_name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900">{customer.business_name}</span>
+                        {customer.hasFollowUp && (
+                          <span
+                            title="Pending follow-up validation"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"
+                          >
+                            <RefreshCw size={10} /> Follow-up
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-400">{customer.owner_name || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
@@ -519,6 +549,9 @@ const AgentDashboard = () => {
                       <div className="flex items-center gap-1.5">
                         <MapPin size={14} className="text-slate-400" /> {customer.address || 'N/A'}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {customer.created_at ? new Date(customer.created_at).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}
@@ -551,7 +584,17 @@ const AgentDashboard = () => {
               <div key={customer.id} className="border border-slate-100 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <p className="font-bold text-slate-900">{customer.business_name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-slate-900">{customer.business_name}</p>
+                      {customer.hasFollowUp && (
+                        <span
+                          title="Pending follow-up validation"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"
+                        >
+                          <RefreshCw size={10} /> Follow-up
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-400">{customer.owner_name || 'N/A'}</p>
                   </div>
                   <Link
@@ -568,6 +611,9 @@ const AgentDashboard = () => {
                   <MapPin size={14} className="text-slate-400" /> {customer.address || 'N/A'}
                 </div>
                 <div className="text-xs text-slate-400 mt-2">
+                  Created: {customer.created_at ? new Date(customer.created_at).toLocaleString() : '—'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
                   Last visit: {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}
                 </div>
               </div>

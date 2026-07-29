@@ -50,7 +50,7 @@ const NotActivatedScreen = () => (
 /* ══════════════════════════════════════════════════
    PIN GATE
 ══════════════════════════════════════════════════ */
-const PinGate = ({ onSuccess, agentId }) => {
+const PinGate = ({ onSuccess }) => {
     const [pin, setPin]           = useState(['', '', '', '', '', '']);
     const [error, setError]       = useState('');
     const [attempts, setAttempts] = useState(() => {
@@ -63,10 +63,37 @@ const PinGate = ({ onSuccess, agentId }) => {
     });
     const [checking, setChecking] = useState(false);
     const [showPin, setShowPin]   = useState(false);
+    const [forgotState, setForgotState] = useState('idle'); // idle | sending | sent | error
+    const [forgotError, setForgotError] = useState('');
     const refs                    = useRef([]);
 
     const isLocked  = Date.now() < lockedUntil;
     const remaining = Math.ceil((lockedUntil - Date.now()) / 60000);
+
+    const handleForgotPin = async () => {
+        if (forgotState === 'sending') return;
+        setForgotState('sending');
+        setForgotError('');
+        try {
+            const res  = await fetch(`${API_URL}/auth/forgot-senior-agent-pin`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setForgotState('error');
+                setForgotError(data.error || 'Failed to send reset email.');
+                return;
+            }
+            setForgotState('sent');
+        } catch {
+            setForgotState('error');
+            setForgotError('Network error. Please try again.');
+        }
+    };
 
     const handleInput = (val, idx) => {
         if (!/^\d*$/.test(val)) return;
@@ -99,7 +126,7 @@ const PinGate = ({ onSuccess, agentId }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 },
-                body: JSON.stringify({ agentId, pin: pinStr }),
+                body: JSON.stringify({ pin: pinStr }),
             });
             const data = await res.json();
 
@@ -138,6 +165,27 @@ const PinGate = ({ onSuccess, agentId }) => {
             setChecking(false);
         }
     };
+
+    if (forgotState === 'sent') return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="bg-white rounded-[2rem] shadow-soft border border-slate-100 p-8 max-w-sm w-full text-center space-y-4">
+                <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto">
+                    <Mail size={22} className="text-emerald-600" />
+                </div>
+                <h2 className="text-xl font-black text-slate-900">Check Your Email</h2>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                    We've sent a PIN reset link to your registered email. Click it to set a new 6-digit PIN,
+                    then come back here to unlock Team Activity.
+                </p>
+                <button
+                    onClick={() => setForgotState('idle')}
+                    className="text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors"
+                >
+                    ← Back to PIN entry
+                </button>
+            </div>
+        </div>
+    );
 
     return (
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -200,6 +248,18 @@ const PinGate = ({ onSuccess, agentId }) => {
                                 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 : <><CheckCircle size={16} /> Unlock Team Activity</>
                             }
+                        </button>
+
+                        {forgotError && (
+                            <p className="text-xs text-red-500 font-semibold text-center mt-3">{forgotError}</p>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleForgotPin}
+                            disabled={forgotState === 'sending'}
+                            className="w-full text-center text-xs font-bold text-slate-400 hover:text-primary-600 mt-4 transition-colors disabled:opacity-60"
+                        >
+                            {forgotState === 'sending' ? 'Sending reset link…' : 'Forgot PIN?'}
                         </button>
                     </>
                 )}
@@ -288,7 +348,7 @@ const TeamActivity = () => {
 
             const { data: members } = await supabase
                 .from('senior_agent_teams')
-                .select('agents(id, name, email, status, profile_photo, territory, updated_at)')
+                .select('agents(id, name, email, status, profile_photo, territory)')
                 .eq('senior_agent_id', saRow.id);
 
             const agents = (members || []).map(m => m.agents).filter(Boolean);
@@ -356,7 +416,7 @@ const TeamActivity = () => {
     if (!isActivated) return <NotActivatedScreen />;
 
     // ── PIN gate
-    if (!verified) return <PinGate agentId={user?.id} onSuccess={() => setVerified(true)} />;
+    if (!verified) return <PinGate onSuccess={() => setVerified(true)} />;
 
     // ── Loading team data
     if (loading) return (

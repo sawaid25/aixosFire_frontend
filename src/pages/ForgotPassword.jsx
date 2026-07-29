@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, Shield, ArrowLeft, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Shield, ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { API_URL } from '../api/client';
 
 const ForgotPassword = () => {
@@ -10,6 +10,9 @@ const ForgotPassword = () => {
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
     const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -21,7 +24,7 @@ const ForgotPassword = () => {
             const res = await fetch(`${API_URL}/auth/forgot-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify({ email, role })
             });
             const data = await res.json();
             if (res.ok) setStep(2);
@@ -32,8 +35,9 @@ const ForgotPassword = () => {
 
     const handleResetPassword = async (e) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+        if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
+        setLoading(true);
         try {
             const res = await fetch(`${API_URL}/auth/reset-password`, {
                 method: 'POST',
@@ -92,7 +96,30 @@ const ForgotPassword = () => {
                                 <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="input-field pl-12" placeholder="••••••••" />
+                                    <input type={showPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} className="input-field pl-12 pr-11" placeholder="••••••••" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(p => !p)}
+                                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+                                <div className="relative">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                    <input type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} className="input-field pl-12 pr-11" placeholder="••••••••" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(p => !p)}
+                                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                        tabIndex={-1}
+                                    >
+                                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
                                 </div>
                             </div>
                             <button type="submit" disabled={loading} className="w-full btn-primary">

@@ -3,6 +3,27 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { API_URL } from '../../api/client';
 import { Shield, Star, CheckCircle, AlertTriangle, Eye, EyeOff, Lock } from 'lucide-react';
 
+const PinBoxes = ({ value, onChange, onKeyDown, refs, label, showPin }) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+        <div className="flex gap-3 justify-center">
+            {value.map((digit, i) => (
+                <input
+                    key={i}
+                    ref={el => refs.current[i] = el}
+                    type={showPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => onChange(e.target.value, i)}
+                    onKeyDown={e => onKeyDown(e, i)}
+                    className="w-12 h-12 text-center text-xl font-black border-2 rounded-2xl outline-none transition-all bg-slate-50 focus:bg-white focus:border-primary-500 text-slate-900"
+                />
+            ))}
+        </div>
+    </div>
+);
+
 const SeniorAgentActivate = () => {
     const [searchParams]        = useSearchParams();
     const token                  = searchParams.get('token');
@@ -83,27 +104,6 @@ const SeniorAgentActivate = () => {
             setSubmitting(false);
         }
     };
-
-    const PinBoxes = ({ value, onChange, onKeyDown, refs, label }) => (
-        <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-            <div className="flex gap-3 justify-center">
-                {value.map((digit, i) => (
-                    <input
-                        key={i}
-                        ref={el => refs.current[i] = el}
-                        type={showPin ? 'text' : 'password'}
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={e => onChange(e.target.value, i)}
-                        onKeyDown={e => onKeyDown(e, i)}
-                        className="w-12 h-12 text-center text-xl font-black border-2 rounded-2xl outline-none transition-all bg-slate-50 focus:bg-white focus:border-primary-500 text-slate-900"
-                    />
-                ))}
-            </div>
-        </div>
-    );
 
     // ── Verifying
     if (step === 'verifying') return (
@@ -188,6 +188,7 @@ const SeniorAgentActivate = () => {
                             onChange={(val, idx) => handlePinInput(val, idx, pinRefs, setPin)}
                             onKeyDown={(e, idx) => handlePinKeyDown(e, idx, pinRefs, setPin)}
                             refs={pinRefs}
+                            showPin={showPin}
                         />
                         <PinBoxes
                             label="Confirm PIN"
@@ -195,6 +196,7 @@ const SeniorAgentActivate = () => {
                             onChange={(val, idx) => handlePinInput(val, idx, confirmRefs, setConfirmPin)}
                             onKeyDown={(e, idx) => handlePinKeyDown(e, idx, confirmRefs, setConfirmPin)}
                             refs={confirmRefs}
+                            showPin={showPin}
                         />
 
                         <button
