@@ -159,15 +159,16 @@ export async function finalizeRefillAcceptance({
 
   if (agentId) {
     const msg = `Partner accepted ${acceptedKg}kg and rejected ${rejectedKg}kg for inquiry ${inquiryNo || inquiryId}.`;
+    // notifications has no user_id/customer_id columns (recipient_id already
+    // carries the agent) — matches the insert shape used elsewhere, e.g.
+    // PartnerQuotationModal's notification insert.
     const row = {
       recipient_id: agentId,
       recipient_role: 'agent',
-      user_id: agentId, // compatibility if backend/SQL expects user_id naming
       sender_id: partnerId || null,
       sender_role: 'Partner',
       message: msg,
       inquiry_id: inquiryId,
-      customer_id: customerId || null,
       notification_type: 'refill_update',
       type: 'refill_update',
       is_read: false,

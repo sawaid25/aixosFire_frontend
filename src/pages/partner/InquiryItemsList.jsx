@@ -498,7 +498,6 @@ const InquiryItemsList = () => {
             {isValidation && validationViewModel ? (
                 <ValidationInquiryDetail
                     viewModel={validationViewModel}
-                    inquiryItems={Array.isArray(inquiry?.inquiry_items) ? inquiry.inquiry_items : []}
                 />
             ) : isRefill && refillViewModel ? (
                 <RefillInquiryDetail 

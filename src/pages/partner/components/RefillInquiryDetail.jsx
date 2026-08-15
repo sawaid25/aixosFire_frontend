@@ -93,6 +93,14 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
   const [saving, setSaving] = useState(false);
   const [openChat, setOpenChat] = useState(null); // null | 'customer' | 'agent'
 
+  // acceptedLocked is true once a line's accepted_kg has actually been persisted
+  // (either just now, via the local patch in handleFinalize, or on an earlier visit,
+  // read back from the DB via modelLines/refillInquiryViewModel). Deriving the
+  // "already finalized" state from this — rather than from the inquiry's overall
+  // status, which this action never touches — means the button correctly stays
+  // locked both immediately after a successful submit and after a page reload.
+  const allFinalized = lines.length > 0 && lines.every((l) => l.acceptedLocked);
+
   useEffect(() => {
     if (!modelLines || !inquiryId) return;
 
@@ -533,15 +541,21 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
             </div>
 
             <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={handleFinalize}
-                disabled={saving || !inquiryId || isLocked}
-                className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl transform active:scale-95 transition-all text-lg shadow-xl shadow-slate-200 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {saving ? <Loader2 className="animate-spin" size={22} /> : null}
-                FINALIZE SELECTION
-              </button>
+              {allFinalized ? (
+                <div className="w-full bg-emerald-50 border-2 border-emerald-200 text-emerald-700 font-black py-5 rounded-2xl flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
+                  <CheckCircle2 size={22} /> Selection Finalized
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleFinalize}
+                  disabled={saving || !inquiryId || isLocked}
+                  className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl transform active:scale-95 transition-all text-lg shadow-xl shadow-slate-200 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {saving ? <Loader2 className="animate-spin" size={22} /> : null}
+                  {saving ? 'FINALIZING…' : 'FINALIZE SELECTION'}
+                </button>
+              )}
               <Link
                 to="/partner/dashboard"
                 className="block w-full text-center bg-white text-slate-400 font-bold py-4 rounded-2xl hover:text-slate-600 transition-all text-sm"

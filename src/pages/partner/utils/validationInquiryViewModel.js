@@ -10,45 +10,49 @@ const formatDate = (value) => {
     return d.toISOString().split('T')[0];
 };
 
+// inquiry_items has no "range" field — each row is one physical unit with its own
+// serial_no. The breakdown table groups those units by extinguisher type, so the
+// "range" has to be derived from the serial_no values within each group.
+const formatSerialRange = (serialNos) => {
+    const nums = serialNos
+        .map((s) => (s == null ? null : Number(s)))
+        .filter((n) => n != null && !Number.isNaN(n));
+
+    if (nums.length === 0) return '—';
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    return min === max ? String(min) : `${min}–${max}`;
+};
+
 const normalizeUtilizationRows = (inquiry) => {
-    const raw =
-        inquiry.utilization_breakdown ||
-        inquiry.sticker_utilization ||
-        inquiry.stickerUtilization ||
-        inquiry.validation_items ||
-        null;
-
-    if (Array.isArray(raw) && raw.length > 0) {
-        return raw.map((row) => ({
-            type:
-                row.extinguisher_type ||
-                row.type ||
-                row.system ||
-                '—',
-            count: row.quantity ?? row.count ?? 0,
-            serialRange:
-                row.serial_range ||
-                row.serialRange ||
-                row.serial_no_range ||
-                row.serial_range_label ||
-                '—'
-        }));
-    }
-
     const items = inquiry.inquiry_items;
-    if (Array.isArray(items) && items.length > 0) {
-        return items.map((item) => ({
-            type: item.type || item.system || item.system_type || '—',
-            count: item.quantity ?? 0,
-            serialRange:
-                item.serial_range ||
-                item.serial_range_label ||
-                item.maintenance_notes ||
-                '—'
-        }));
-    }
+    if (!Array.isArray(items) || items.length === 0) return [];
 
-    return [];
+    const groups = new Map();
+    items.forEach((item) => {
+        const type = item.type || item.system || item.system_type || 'Unknown';
+        if (!groups.has(type)) groups.set(type, { count: 0, serialNos: [], statuses: new Set(), units: new Set(), items: [] });
+        const group = groups.get(type);
+        group.count += Number(item.quantity) || 1;
+        if (item.serial_no != null) group.serialNos.push(item.serial_no);
+        if (item.status) group.statuses.add(item.status);
+        if (item.unit) group.units.add(item.unit);
+        group.items.push(item);
+    });
+
+    return Array.from(groups.entries()).map(([type, group]) => ({
+        type,
+        count: group.count,
+        unit: group.units.size === 1 ? [...group.units][0] : null,
+        serialRange: formatSerialRange(group.serialNos),
+        // Uniform status across every unit in the group shows as-is; a group that
+        // mixes statuses (e.g. one refilled, one still new) is flagged rather than
+        // silently picking one and hiding the disagreement.
+        status: group.statuses.size === 1 ? [...group.statuses][0] : (group.statuses.size > 1 ? 'Mixed' : null),
+        // The individual inquiry_items rows behind this group — the expanded detail
+        // view needs every one of them, not just the first, once a type has >1 unit.
+        items: group.items,
+    }));
 };
 
 export const buildValidationInquiryViewModel = (inquiry) => {
@@ -95,12 +99,9 @@ export const buildValidationInquiryViewModel = (inquiry) => {
         inquiry.agent?.name ||
         '—';
 
-    const stickersRaw =
-        inquiry.total_stickers ??
-        inquiry.stickers_used ??
-        inquiry.stickersUsed ??
-        inquiry.total_stickers_used ??
-        0;
+    // Stickers actually consumed for this inquiry live in sticker_usage_history
+    // (attached by the backend as `sticker_usage`), not on the inquiry row itself.
+    const stickersRaw = inquiry.sticker_usage?.quantity ?? 0;
 
     const agentNotes =
         inquiry.agent_comments ||

@@ -15,6 +15,7 @@ import {
     Image as ImageIcon,
     Mic,
     Edit2,
+    X,
     CheckCircle,
     XCircle,
     ExternalLink,
@@ -738,11 +739,11 @@ const InquiryItemDetailPage = () => {
                             </h2>
                             <button
                                 type="button"
-                                onClick={() => setIsNewUnitModalOpen(true)}
+                                onClick={() => setIsNewUnitModalOpen((prev) => !prev)}
                                 className="p-3 bg-slate-900 hover:bg-primary-500 text-white rounded-2xl shadow-lg transition-all active:scale-95"
-                                title="Edit identification details"
+                                title={isNewUnitModalOpen ? 'Collapse editor' : 'Edit identification details'}
                             >
-                                <Edit2 size={16} />
+                                {isNewUnitModalOpen ? <X size={16} /> : <Edit2 size={16} />}
                             </button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -753,6 +754,19 @@ const InquiryItemDetailPage = () => {
                             <DetailField label="System" value={formatVal(item.system)} />
                             <DetailField label="System type" value={formatVal(item.system_type)} />
                         </div>
+
+                        {isNewUnitModalOpen && (
+                            <div className="mt-6">
+                                <NewUnitDetailModal
+                                    isOpen={isNewUnitModalOpen}
+                                    onClose={() => setIsNewUnitModalOpen(false)}
+                                    inquiry={{ ...inquiry, selectedItem: item }}
+                                    onUpdate={async () => {
+                                        await loadInquiry({ showPageLoader: false });
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Dates */}
@@ -1026,15 +1040,6 @@ const InquiryItemDetailPage = () => {
                     } catch (e) {
                         console.error(e);
                     }
-                }}
-            />
-
-            <NewUnitDetailModal
-                isOpen={isNewUnitModalOpen}
-                onClose={() => setIsNewUnitModalOpen(false)}
-                inquiry={{ ...inquiry, selectedItem: item }}
-                onUpdate={async () => {
-                    await loadInquiry({ showPageLoader: false });
                 }}
             />
 
