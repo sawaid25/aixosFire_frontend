@@ -147,6 +147,10 @@ const VisitForm = () => {
   const [unitVoiceWarnings, setUnitVoiceWarnings] = useState({});
   const [partners, setPartners] = useState([]);
   const [loadingPartners, setLoadingPartners] = useState(false);
+  // Per-partner assigned-product cache, keyed by partner id — fetched once per
+  // partner the agent selects, not on every render.
+  const [partnerProductsCache, setPartnerProductsCache] = useState({});
+  const [loadingPartnerProducts, setLoadingPartnerProducts] = useState({});
   const debounceTimers = useRef([]);
   const searchDebounceRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -172,6 +176,70 @@ const VisitForm = () => {
     };
     fetchPartners();
   }, []);
+
+  const fetchPartnerProducts = async (partnerId) => {
+    if (!partnerId || partnerId === 'Other' || partnerProductsCache[partnerId]) return;
+    setLoadingPartnerProducts(prev => ({ ...prev, [partnerId]: true }));
+    try {
+      const { data, error } = await supabase
+        .from('partner_products')
+        .select('product_id, products!inner(id, name, description, image_url, category, is_active)')
+        .eq('partner_id', partnerId)
+        .eq('products.is_active', true);
+      if (error) throw error;
+      const products = (data || []).map(row => row.products).filter(Boolean);
+      setPartnerProductsCache(prev => ({ ...prev, [partnerId]: products }));
+    } catch (err) {
+      console.error('Error fetching partner products:', err);
+      setPartnerProductsCache(prev => ({ ...prev, [partnerId]: [] }));
+    } finally {
+      setLoadingPartnerProducts(prev => ({ ...prev, [partnerId]: false }));
+    }
+  };
+
+  const handlePartnerSelect = (index, partnerId) => {
+    handleExtinguisherChange(index, 'partner', partnerId);
+    fetchPartnerProducts(partnerId);
+  };
+
+  /** Product picker shown once a real (non-"Other") Partner is selected — only that Partner's active assigned products appear. */
+  const renderProductPicker = (ext, index) => {
+    if (!ext.partner || ext.partner === 'Other') return null;
+    const isLoading = Boolean(loadingPartnerProducts[ext.partner]);
+    const products = partnerProductsCache[ext.partner] || [];
+    const selected = products.find(p => p.id === ext.productId);
+
+    return (
+      <div className="md:col-span-4">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+          Assigned Product <span className="normal-case text-slate-400">(optional)</span>
+        </label>
+        {isLoading ? (
+          <div className="input-field py-2 text-sm text-slate-400">Loading assigned products…</div>
+        ) : products.length === 0 ? (
+          <div className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            This partner has no active products assigned yet. Continue with the fields above, or ask Admin to assign products to this partner.
+          </div>
+        ) : (
+          <>
+            <select
+              value={ext.productId || ''}
+              onChange={(e) => handleExtinguisherChange(index, 'productId', e.target.value)}
+              className="input-field py-2 text-sm"
+            >
+              <option value="">No specific product</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {selected?.description && (
+              <p className="text-xs text-slate-400 mt-1.5">{selected.description}</p>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
 
   const FIRE_SYSTEMS = {
@@ -270,6 +338,7 @@ const VisitForm = () => {
       seller: '',
       partner: '',
       customPartner: '',
+      productId: '',
       refillStatus: 'Required',
       price: 180,
       expiryDate: '',
@@ -678,7 +747,13 @@ const VisitForm = () => {
 
 
         if (field === 'type' && value !== 'Other') updated.customType = '';
-        if (field === 'partner' && value !== 'Other') updated.customPartner = '';
+        if (field === 'partner') {
+          updated.customPartner = value !== 'Other' ? '' : updated.customPartner;
+          // A product picked for the previous partner may not belong to the
+          // new one — the partner_products DB trigger would reject it anyway,
+          // so clear it here rather than let the agent submit a stale pick.
+          updated.productId = '';
+        }
         if (field === 'material' && value !== 'Other') updated.customMaterial = '';
         if (field === 'firefightingSystem' && value !== 'Other') updated.customFirefightingSystem = '';
 
@@ -1541,6 +1616,7 @@ const VisitForm = () => {
               system: item.firefightingSystem || null,
               status: item.mode === 'New Unit' ? 'New' : (item.mode === 'Refill' ? 'Refilled' : (item.mode === 'Validation' ? 'Valid' : 'Maintained')),
               catalog_no: item.catalog_no || null,
+              product_id: item.productId || null,
               maintenance_notes: item.maintenanceNotes || null,
               maintenance_voice_url: voiceUrl,
               maintenance_unit_photo_url: photoUrl,
@@ -2373,7 +2449,7 @@ const VisitForm = () => {
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
                             <select
                               value={ext.partner || ''}
-                              onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
+                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
                               className="input-field py-2 text-sm"
                               required
                             >
@@ -2383,6 +2459,8 @@ const VisitForm = () => {
                               ))}
                             </select>
                           </div>
+
+                          {renderProductPicker(ext, index)}
 
                           <div className="md:col-span-3">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Photo Reference</label>
@@ -2439,7 +2517,7 @@ const VisitForm = () => {
                             </label>
                             <select
                               value={ext.partner || ''}
-                              onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
+                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
                               className="input-field py-2 text-sm"
                             >
                               <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
@@ -2448,6 +2526,9 @@ const VisitForm = () => {
                               ))}
                             </select>
                           </div>
+
+                          {renderProductPicker(ext, index)}
+
                           <div className="md:col-span-3">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Follow-up Date</label>
                             <input
@@ -2756,7 +2837,7 @@ const VisitForm = () => {
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
                         <select
                           value={ext.partner}
-                          onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
+                          onChange={(e) => handlePartnerSelect(index, e.target.value)}
                           className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
                           disabled={loadingPartners || ext.isLocked}
                         >
@@ -2766,6 +2847,8 @@ const VisitForm = () => {
                           ))}
                           <option value="Other">Other (Custom Partner)</option>
                         </select>
+
+                        {renderProductPicker(ext, index)}
 
                         {ext.partner === 'Other' && (
                           <div className="mt-3 animate-fade-in">

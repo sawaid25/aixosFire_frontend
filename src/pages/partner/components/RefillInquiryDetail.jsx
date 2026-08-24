@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Split, Truck, Info, XCircle, MessageCircle, ChevronLeft, Loader2, Beaker, Calendar, Clock, CheckCircle2, User } from 'lucide-react';
+import { Split, Truck, Info, XCircle, MessageCircle, ChevronLeft, Loader2, Beaker, Calendar, Clock, CheckCircle2, User, Package } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import { finalizeRefillAcceptance } from '../../../api/partnerRefill';
@@ -195,6 +195,16 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
       toast.error('Missing inquiry reference.');
       return;
     }
+
+    // Pricing is mandatory: a line with no resolvable price (not even the
+    // built-in fallback) must not be submitted as if SAR 0.00 were correct.
+    const unpriced = lines.filter((l) => !l.hasPrice || l.pricePerKg == null);
+    if (unpriced.length > 0) {
+      const names = [...new Set(unpriced.map((l) => l.type || l.serviceName || 'line item'))].join(', ');
+      toast.error(`Cannot finalize — no pricing is set for: ${names}. Contact an admin to configure pricing.`);
+      return;
+    }
+
     setSaving(true);
     try {
       console.log('[RefillInquiryDetail] acceptedKg before submit', lines.map((l) => ({
@@ -415,6 +425,11 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
                                   <span className="font-bold text-primary-600 text-sm block">
                                     SAR {Number(item.pricePerKg).toFixed(2)}
                                   </span>
+                                  {item.priceSource === 'fallback' && (
+                                    <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[8px] font-black uppercase tracking-wider">
+                                      Default pricing — not configured
+                                    </span>
+                                  )}
                                   {deliveryMode === 'agent' && (
                                     <span className="text-[10px] text-slate-400 block italic">
                                       (Base {Number(item.basePricePerKg).toFixed(2)} - Deduct {Number(item.deliveryDeduction).toFixed(2)})
@@ -545,11 +560,16 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
                 <div className="w-full bg-emerald-50 border-2 border-emerald-200 text-emerald-700 font-black py-5 rounded-2xl flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
                   <CheckCircle2 size={22} /> Selection Finalized
                 </div>
+              ) : isLocked ? (
+                <div className="w-full bg-amber-50 border-2 border-amber-200 text-amber-700 font-bold py-5 px-6 rounded-2xl flex items-center justify-center gap-2 text-sm text-center leading-relaxed">
+                  <Info size={20} className="shrink-0" />
+                  This inquiry was accepted before line items were finalized — selection can no longer be edited here. Contact support if accepted quantities need correcting.
+                </div>
               ) : (
                 <button
                   type="button"
                   onClick={handleFinalize}
-                  disabled={saving || !inquiryId || isLocked}
+                  disabled={saving || !inquiryId}
                   className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl transform active:scale-95 transition-all text-lg shadow-xl shadow-slate-200 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {saving ? <Loader2 className="animate-spin" size={22} /> : null}

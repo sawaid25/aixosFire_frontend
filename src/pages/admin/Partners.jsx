@@ -28,14 +28,15 @@ const Partners = () => {
             setLoading(true);
             try {
                 const [
-                    { data: pData },
+                    { data: pData, error: pErr },
                     { data: iData },
                     { data: sData },
                 ] = await Promise.all([
-                    supabase.from('partners').select('*').order('name'),
+                    supabase.from('partners').select('*').order('business_name'),
                     supabase.from('inquiries').select('id,status,type,partner_id,created_at'),
                     supabase.from('sticker_usage_history').select('id,partner_id,quantity,used_for,created_at'),
                 ]);
+                if (pErr) console.error('Failed to load partners:', pErr);
                 setPartners(pData || []);
                 setInquiries(iData || []);
                 setStickerData(sData || []);
@@ -63,7 +64,8 @@ const Partners = () => {
 
     const filtered = useMemo(() => {
         return enriched.filter(p => {
-            const matchesSearch = (p.name||'').toLowerCase().includes(search.toLowerCase()) ||
+            const matchesSearch = (p.business_name||'').toLowerCase().includes(search.toLowerCase()) ||
+                                  (p.owner_name||'').toLowerCase().includes(search.toLowerCase()) ||
                                   (p.email||'').toLowerCase().includes(search.toLowerCase());
             if (filter === 'All') return matchesSearch;
             if (filter === 'Active') return matchesSearch && ['active','accepted'].includes((p.status||'').toLowerCase());
@@ -155,7 +157,8 @@ const Partners = () => {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                                         <div>
-                                            <p className="font-bold text-slate-900">{partner.name || `Partner #${partner.id?.toString().slice(-6)}`}</p>
+                                            <p className="font-bold text-slate-900">{partner.business_name || `Partner #${partner.id?.toString().slice(-6)}`}</p>
+                                            {partner.owner_name && <p className="text-xs text-slate-500 mt-0.5">{partner.owner_name}</p>}
                                             {partner.email && <p className="text-xs text-slate-400 mt-0.5">{partner.email}</p>}
                                         </div>
                                         <div className="flex items-center gap-2">

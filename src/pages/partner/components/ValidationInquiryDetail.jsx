@@ -1,6 +1,30 @@
 import React, { useState } from 'react';
-import { FileText, Calendar, MapPin, Tag, User, MessageCircle, ChevronDown, ChevronUp, Mic } from 'lucide-react';
+import { FileText, Calendar, MapPin, Tag, User, MessageCircle, ChevronDown, ChevronUp, Mic, CheckCircle2, XCircle, PlayCircle, Loader2 } from 'lucide-react';
 import CustomerContactSection from './CustomerContactSection';
+
+const STATUS_CARD_STYLE = {
+    pending: 'bg-amber-50 border-amber-100',
+    accepted: 'bg-blue-50 border-blue-100',
+    in_progress: 'bg-blue-50 border-blue-100',
+    completed: 'bg-emerald-50 border-emerald-100',
+    rejected: 'bg-red-50 border-red-100',
+};
+
+const STATUS_TEXT_STYLE = {
+    pending: 'text-amber-900',
+    accepted: 'text-blue-900',
+    in_progress: 'text-blue-900',
+    completed: 'text-emerald-900',
+    rejected: 'text-red-900',
+};
+
+const STATUS_LABEL = {
+    pending: 'Pending Review',
+    accepted: 'Accepted',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    rejected: 'Rejected',
+};
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleDateString() : null);
 const fmtDateTime = (value) => (value ? new Date(value).toLocaleString() : null);
@@ -44,7 +68,14 @@ const buildItemDetailFields = (detail) => {
     ].filter(Boolean);
 };
 
-const ValidationInquiryDetail = ({ viewModel }) => {
+const ValidationInquiryDetail = ({
+    viewModel,
+    onAccept,
+    onReject,
+    onStartWork,
+    onComplete,
+    actionLoading = false,
+}) => {
     const {
         badgeLabel,
         clientName,
@@ -65,6 +96,17 @@ const ValidationInquiryDetail = ({ viewModel }) => {
     } = viewModel;
 
     const [expandedRow, setExpandedRow] = useState(null);
+
+    const statusKey = (status || 'pending').toLowerCase();
+    const cardClass = STATUS_CARD_STYLE[statusKey] || 'bg-slate-50 border-slate-100';
+    const textClass = STATUS_TEXT_STYLE[statusKey] || 'text-slate-900';
+    const statusLabel = STATUS_LABEL[statusKey] || status;
+
+    const handleReject = () => {
+        if (!onReject) return;
+        if (!window.confirm('Are you sure you want to reject this Validation inquiry? This cannot be undone.')) return;
+        onReject();
+    };
 
     const mailHref = customerEmail ? `mailto:${customerEmail}` : null;
 
@@ -176,11 +218,60 @@ const ValidationInquiryDetail = ({ viewModel }) => {
 
                     {/* Right Sidebar */}
                     <div className="lg:col-span-4">
-                        <div className="bg-emerald-50 border border-emerald-100 p-7 rounded-3xl sticky top-6">
-                            <h4 className="font-bold text-emerald-900 text-lg mb-3">Status: {status}</h4>
-                            <p className="text-sm text-emerald-700 leading-relaxed">
+                        <div className={`border p-7 rounded-3xl sticky top-6 ${cardClass}`}>
+                            <h4 className={`font-bold text-lg mb-3 ${textClass}`}>Status: {statusLabel}</h4>
+                            <p className={`text-sm leading-relaxed opacity-80 ${textClass}`}>
                                 This inquiry has been verified by the agent and assigned to your dashboard for validation.
                             </p>
+
+                            {(statusKey === 'pending' || statusKey === 'accepted' || statusKey === 'in_progress') && (
+                                <div className="flex flex-col gap-3 mt-6">
+                                    {statusKey === 'pending' && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={onAccept}
+                                                disabled={actionLoading || !onAccept}
+                                                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                            >
+                                                {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                                Accept Inquiry
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleReject}
+                                                disabled={actionLoading || !onReject}
+                                                className="w-full bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-700 disabled:opacity-50 disabled:pointer-events-none font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                            >
+                                                <XCircle size={18} />
+                                                Reject
+                                            </button>
+                                        </>
+                                    )}
+                                    {statusKey === 'accepted' && (
+                                        <button
+                                            type="button"
+                                            onClick={onStartWork}
+                                            disabled={actionLoading || !onStartWork}
+                                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-blue-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                        >
+                                            {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <PlayCircle size={18} />}
+                                            Start Work
+                                        </button>
+                                    )}
+                                    {statusKey === 'in_progress' && (
+                                        <button
+                                            type="button"
+                                            onClick={onComplete}
+                                            disabled={actionLoading || !onComplete}
+                                            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                        >
+                                            {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                            Mark Complete
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

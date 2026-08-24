@@ -211,11 +211,12 @@ const NotificationBell = ({ onOpenChat }) => {
 
             if (!error && dbNotifs) {
                 dbNotifs.forEach((n) => {
+                    const isProductAssigned = n.notification_type === 'product_assigned' || n.type === 'product_assigned';
                     list.push({
                         id: `notif-${n.id}`,
-                        title: 'System alert',
+                        title: isProductAssigned ? 'New Product Assigned' : 'System alert',
                         message: n.message,
-                        type: 'message',
+                        type: isProductAssigned ? 'product_assigned' : 'message',
                         timestamp: n.created_at,
                         isRead: n.is_read
                     });
@@ -514,6 +515,11 @@ const NotificationBell = ({ onOpenChat }) => {
                 senderRole: notification.senderRole
             });
         }
+        if (notification.type === 'product_assigned') {
+            navigate('/partner/dashboard');
+            setIsOpen(false);
+            return;
+        }
         setIsOpen(false);
     };
 
@@ -532,6 +538,7 @@ const NotificationBell = ({ onOpenChat }) => {
         if (n.type === 'expiry') return <AlertTriangle size={18} className="text-amber-600" />;
         if (n.type === 'quotation') return <FileText size={18} className="text-emerald-600" />;
         if (n.type === 'partial_accept') return <Package size={18} className="text-purple-600" />;
+        if (n.type === 'product_assigned') return <Package size={18} className="text-teal-600" />;
         if (n.type === 'message') return <MessageSquare size={18} className="text-blue-600" />;
         if (n.type === 'agent_complaint') return <MessageSquare size={18} className="text-orange-600" />;
         return <Clock size={18} className="text-amber-600" />;
@@ -541,6 +548,7 @@ const NotificationBell = ({ onOpenChat }) => {
         if (n.type === 'expiry') return 'bg-amber-100 text-amber-700';
         if (n.type === 'quotation') return 'bg-emerald-100 text-emerald-700';
         if (n.type === 'partial_accept') return 'bg-purple-100 text-purple-700';
+        if (n.type === 'product_assigned') return 'bg-teal-100 text-teal-700';
         if (n.type === 'message') return 'bg-blue-100 text-blue-600';
         if (n.type === 'agent_complaint') return 'bg-orange-100 text-orange-600';
         return 'bg-slate-100 text-slate-600';

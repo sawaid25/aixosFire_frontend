@@ -196,6 +196,23 @@ const InquiryItemsList = () => {
         });
     };
 
+    // Validation uses the plain status PATCH (backend-guarded transition map),
+    // not the Maintenance/Refill acceptInquiry endpoint — that endpoint branches
+    // on delivery_mode/pickup_date and doesn't apply to Validation's lifecycle.
+    const handleValidationStatusUpdate = async (newStatus) => {
+        setActionLoading(true);
+        try {
+            await updateInquiryStatus(id, newStatus);
+            toast.success(`Inquiry ${newStatus.replace('_', ' ')} successfully`);
+            await fetchInquiry();
+        } catch (err) {
+            console.error('[InquiryItemsList] handleValidationStatusUpdate error:', err);
+            toast.error(err?.response?.data?.error || err.message || `Failed to update inquiry to ${newStatus}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchInquiry();
     }, [fetchInquiry]);
@@ -498,6 +515,11 @@ const InquiryItemsList = () => {
             {isValidation && validationViewModel ? (
                 <ValidationInquiryDetail
                     viewModel={validationViewModel}
+                    actionLoading={actionLoading}
+                    onAccept={() => handleValidationStatusUpdate('accepted')}
+                    onReject={() => handleValidationStatusUpdate('rejected')}
+                    onStartWork={() => handleValidationStatusUpdate('in_progress')}
+                    onComplete={() => handleValidationStatusUpdate('completed')}
                 />
             ) : isRefill && refillViewModel ? (
                 <RefillInquiryDetail 

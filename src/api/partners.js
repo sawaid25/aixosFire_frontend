@@ -124,6 +124,16 @@ export const submitSiteVisit = async (formData) => {
         throw error;
     }
 };
+export const getMyProducts = async () => {
+    try {
+        const response = await client.get('/partners/products');
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error fetching assigned products:', error);
+        throw error;
+    }
+};
+
 export const getAllPartners = async () => {
     try {
         const response = await client.get('/partners');

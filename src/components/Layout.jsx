@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog } from 'lucide-react';
+import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog, Package } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useLocationTracker from '../hooks/useLocationTracker';
 import NotificationBell from './NotificationBell';
@@ -114,6 +115,7 @@ const Layout = ({ children }) => {
                 { icon: BarChart2,       label: 'Analytics',        to: '/admin/analytics',   group: 'Overview' },
                 { icon: User,            label: 'Agents',           to: '/admin/agents',      group: 'Management' },
                 { icon: Handshake,       label: 'Partners',         to: '/admin/partners',    group: 'Management' },
+                { icon: Package,         label: 'Products',         to: '/admin/products',    group: 'Management' },
                 { icon: Users,           label: 'Customers',        to: '/admin/customers',   group: 'Management' },
                 { icon: Bookmark,        label: 'Service Queue',    to: '/admin/services',    group: 'Operations' },
                 { icon: Wrench,          label: 'Operations',       to: '/admin/operations',  group: 'Operations' },
@@ -332,6 +334,8 @@ const Layout = ({ children }) => {
                 recipientId={selectedChatContext?.senderId}
                 recipientRole={selectedChatContext?.senderRole}
             />
+
+            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
         </div>
     );
 };

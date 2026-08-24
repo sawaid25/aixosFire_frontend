@@ -177,6 +177,7 @@ export async function createInquiryViaSupabase(inquiryData, items) {
       system: it.system ?? null,
       status: it.status ?? null,
       catalog_no: it.catalog_no ?? null,
+      product_id: it.product_id ?? null,
       maintenance_notes: it.maintenance_notes ?? null,
       maintenance_voice_url: it.maintenance_voice_url ?? null,
       maintenance_unit_photo_url: it.maintenance_unit_photo_url ?? null,

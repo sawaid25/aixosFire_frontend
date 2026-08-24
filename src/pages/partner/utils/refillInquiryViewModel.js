@@ -47,10 +47,7 @@ export const buildRefillLines = (inquiry, pricingRows = []) => {
       ? Math.max(0, unitCount || 1) * capacityKg
       : unitCount;
 
-    const { pricePerKg: basePricePerKg, matched } = resolvePricePerKg(pricingKey, pricingRows);
-
-    console.log('Service:', item.type);
-    console.log('Matched base price:', matched ? basePricePerKg : null);
+    const { pricePerKg: basePricePerKg, matched, source: priceSource } = resolvePricePerKg(pricingKey, pricingRows);
 
     const pricePerKg = matched ? Math.max(0, basePricePerKg - deliveryDeduction) : null;
     
@@ -75,6 +72,7 @@ export const buildRefillLines = (inquiry, pricingRows = []) => {
       basePricePerKg: matched ? basePricePerKg : null,
       deliveryDeduction: matched ? deliveryDeduction : 0,
       hasPrice: matched,
+      priceSource,
       acceptedKg,
       rejectedKg,
       acceptedLocked: hasPersistedAcceptance,

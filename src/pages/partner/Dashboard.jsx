@@ -9,17 +9,18 @@ import { getPartnerDashboard, getPartnerStats, getInquiries } from '../../api/pa
 import { repairValidationInquiryStatuses } from '../../api/inquirySupabase';
 import { useAuth } from '../../context/AuthContext';
 import { fetchPartnerStickerSummary, repairMissingStickerRecords } from '../../api/partnerStickers';
+import MyProductsSection from './components/MyProductsSection';
 
 const CLOSED_LIKE_STATUSES = new Set([
     'accepted', 'closed', 'completed', 'approved', 'inquiry closed'
 ]);
 
-// Validation inquiries are always treated as completed regardless of stored status
-const resolveStatus = (inq) => {
-    const type = (inq.type || inq.inquiry_type || '').toString().trim().toLowerCase();
-    if (type === 'validation') return 'completed';
-    return (inq.status ?? '').toString().trim().toLowerCase() || 'pending';
-};
+// Validation inquiries are auto-created as 'completed' (see createInquiry in
+// api/partners.js), so most rows are naturally closed already. The rare row that
+// isn't (e.g. mid-lifecycle after Accept/Start Work) should show its real status
+// instead of being masked, so it stays visible and actionable on the dashboard.
+const resolveStatus = (inq) =>
+    (inq.status ?? '').toString().trim().toLowerCase() || 'pending';
 
 const countClosedLikeInquiries = (inquiries) => {
     if (!Array.isArray(inquiries)) return 0;
@@ -356,6 +357,8 @@ const PartnerDashboard = () => {
                     )}
                 </div>
             </div>
+
+            <MyProductsSection />
         </div>
     );
 };

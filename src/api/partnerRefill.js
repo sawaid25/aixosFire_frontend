@@ -44,11 +44,14 @@ export function pricingLookupKeys(serviceLabel) {
 /**
  * Match inquiry_items.type (or system) to service_pricing.service_name.
  * Tries full label first, then first segment before " - …" so "CO2" matches "CO2 - Carbon Dioxide".
- * @returns {{ pricePerKg: number | null, matched: boolean }}
+ * `source` tells callers whether the price came from a real service_pricing row
+ * ('db'), the hardcoded keyword safety net below ('fallback'), or nothing matched
+ * at all ('none') — callers must not treat 'fallback' as if it were 'db'.
+ * @returns {{ pricePerKg: number | null, matched: boolean, source: 'db' | 'fallback' | 'none' }}
  */
 export function resolvePricePerKg(serviceLabel, pricingRows) {
   if (!serviceLabel || !Array.isArray(pricingRows)) {
-    return { pricePerKg: null, matched: false };
+    return { pricePerKg: null, matched: false, source: 'none' };
   }
 
   const normalize = (v) => String(v ?? '')
@@ -65,7 +68,7 @@ export function resolvePricePerKg(serviceLabel, pricingRows) {
     const hit = pricingRows.find((r) => normalize(r.service_name) === keyNorm);
     if (hit) {
       const n = Number(hit.price_per_kg);
-      return { pricePerKg: Number.isFinite(n) ? n : null, matched: true };
+      return { pricePerKg: Number.isFinite(n) ? n : null, matched: true, source: 'db' };
     }
   }
 
@@ -80,12 +83,13 @@ export function resolvePricePerKg(serviceLabel, pricingRows) {
     });
     if (hit) {
       const n = Number(hit.price_per_kg);
-      return { pricePerKg: Number.isFinite(n) ? n : null, matched: true };
+      return { pricePerKg: Number.isFinite(n) ? n : null, matched: true, source: 'db' };
     }
   }
 
   // 3) Built-in default fallback when service_pricing is empty/missing.
-  //    Keeps refill pricing usable even before DB defaults are seeded.
+  //    Keeps refill pricing usable even before DB defaults are seeded — but this
+  //    is NOT configured pricing, so callers must label it as such (source: 'fallback').
   const defaultPricingByKeyword = [
     { keyword: 'dry powder', pricePerKg: 8 },
     { keyword: 'co2', pricePerKg: 10 },
@@ -98,11 +102,11 @@ export function resolvePricePerKg(serviceLabel, pricingRows) {
     const keyNorm = normalize(key);
     const hit = defaultPricingByKeyword.find((d) => keyNorm.includes(d.keyword));
     if (hit) {
-      return { pricePerKg: hit.pricePerKg, matched: true };
+      return { pricePerKg: hit.pricePerKg, matched: true, source: 'fallback' };
     }
   }
 
-  return { pricePerKg: null, matched: false };
+  return { pricePerKg: null, matched: false, source: 'none' };
 }
 
 /** @deprecated use resolvePricePerKg; returns 0 when unmatched */
@@ -113,6 +117,12 @@ export function matchPricePerKg(serviceLabel, pricingRows) {
 
 /**
  * Persist accepted quantities (kg or same unit as inquiry_items.quantity) and notify agent if partial.
+ *
+ * Calls the `finalize_refill_acceptance` Postgres function (see
+ * supabase/migrations/20260816120000_finalize_refill_acceptance_rpc.sql)
+ * instead of looping per-line UPDATEs from the client — all item writes +
+ * the agent notification happen atomically in one transaction, and the RPC
+ * verifies the inquiry actually belongs to `partnerId` before writing anything.
  */
 export async function finalizeRefillAcceptance({
   inquiryId,
@@ -124,61 +134,29 @@ export async function finalizeRefillAcceptance({
   transportFlatSar = 0,
 }) {
   const list = Array.isArray(lines) ? lines : [];
-  let assignedSum = 0;
-  let acceptedSum = 0;
+  const items = list.map((line) => ({
+    itemId: line.itemId,
+    quantityKg: Number(line.quantityKg) || 0,
+    acceptedKg: Math.max(0, Number(line.acceptedKg) || 0),
+  }));
 
-  for (const line of list) {
-    const assigned = Number(line.quantityKg) || 0;
-    const accepted = Math.min(
-      Math.max(0, Number(line.acceptedKg) || 0),
-      assigned
-    );
-    const rejected = Math.max(0, assigned - accepted);
-    assignedSum += assigned;
-    acceptedSum += accepted;
+  const { data, error } = await supabase.rpc('finalize_refill_acceptance', {
+    p_inquiry_id: inquiryId,
+    p_partner_id: partnerId,
+    p_items: items,
+    p_agent_id: agentId || null,
+    p_inquiry_no: inquiryNo || null,
+  });
 
-    const { error: upErr } = await supabase
-      .from('inquiry_items')
-      .update({
-        accepted_quantity: accepted, // legacy compatibility
-        accepted_kg: accepted,
-        rejected_kg: rejected,
-      })
-      .eq('id', line.itemId)
-      .eq('inquiry_id', inquiryId);
-
-    if (upErr) {
-      console.error('[finalizeRefillAcceptance] item update', upErr);
-      throw upErr;
-    }
+  if (error) {
+    console.error('[finalizeRefillAcceptance] rpc error', error);
+    throw error;
   }
 
+  const rows = Array.isArray(data) ? data : [];
+  const assignedSum = items.reduce((acc, i) => acc + i.quantityKg, 0);
+  const acceptedSum = rows.reduce((acc, r) => acc + (Number(r.accepted_kg) || 0), 0);
   const remaining = Math.max(0, assignedSum - acceptedSum);
-  const acceptedKg = acceptedSum;
-  const rejectedKg = remaining;
 
-  if (agentId) {
-    const msg = `Partner accepted ${acceptedKg}kg and rejected ${rejectedKg}kg for inquiry ${inquiryNo || inquiryId}.`;
-    // notifications has no user_id/customer_id columns (recipient_id already
-    // carries the agent) — matches the insert shape used elsewhere, e.g.
-    // PartnerQuotationModal's notification insert.
-    const row = {
-      recipient_id: agentId,
-      recipient_role: 'agent',
-      sender_id: partnerId || null,
-      sender_role: 'Partner',
-      message: msg,
-      inquiry_id: inquiryId,
-      notification_type: 'refill_update',
-      type: 'refill_update',
-      is_read: false,
-    };
-    const { error: nErr } = await supabase.from('notifications').insert([row]);
-    if (nErr) {
-      console.error('[finalizeRefillAcceptance] notification', nErr);
-      throw nErr;
-    }
-  }
-
-  return { assignedSum, acceptedSum, remaining, acceptedKg, rejectedKg, transportFlatSar };
+  return { assignedSum, acceptedSum, remaining, acceptedKg: acceptedSum, rejectedKg: remaining, transportFlatSar };
 }

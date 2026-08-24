@@ -36,7 +36,7 @@ const PartnerProfile = () => {
             setLoading(true);
             try {
                 const [
-                    { data: pData },
+                    { data: pData, error: pErr },
                     { data: iData },
                     { data: sData },
                 ] = await Promise.all([
@@ -50,6 +50,7 @@ const PartnerProfile = () => {
                         .eq('partner_id', id)
                         .order('created_at', { ascending: false }),
                 ]);
+                if (pErr) console.error('Failed to load partner:', pErr);
                 setPartner(pData);
                 setInquiries(iData || []);
                 setStickers(sData || []);
@@ -139,7 +140,8 @@ const PartnerProfile = () => {
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <h2 className="text-xl font-display font-bold text-slate-900">{partner.name || `Partner #${id?.slice(-6)}`}</h2>
+                                <h2 className="text-xl font-display font-bold text-slate-900">{partner.business_name || `Partner #${id?.slice(-6)}`}</h2>
+                                {partner.owner_name && <p className="text-sm text-slate-600 mt-0.5">{partner.owner_name}</p>}
                                 {partner.email && <p className="text-sm text-slate-500 mt-0.5">{partner.email}</p>}
                             </div>
                             <div className="flex items-center gap-2">
@@ -151,6 +153,7 @@ const PartnerProfile = () => {
                         </div>
                         <div className="flex flex-wrap gap-4 mt-4 text-sm text-slate-500">
                             {partner.phone && <span className="flex items-center gap-1.5">📞 {partner.phone}</span>}
+                            {partner.address && <span className="flex items-center gap-1.5">📍 {partner.address}</span>}
                             <span className="flex items-center gap-1.5"><Calendar size={14}/>Joined {new Date(partner.created_at).toLocaleDateString()}</span>
                             <span className="flex items-center gap-1.5"><Tag size={14}/>{metrics.stickersRemaining} stickers remaining</span>
                         </div>
