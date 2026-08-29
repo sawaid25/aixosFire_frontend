@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Boxes } from 'lucide-react';
 import { getMyProducts } from '../../../api/partners';
-import ProductImageFallback from '../../../components/products/ProductImageFallback';
+import ProductImage from '../../../components/products/ProductImage';
 
 /**
  * Read-only view of the products Admin has assigned to this Partner. Partners
@@ -60,12 +60,9 @@ const MyProductsSection = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         {products.map((p) => (
                             <div key={p.id} className="rounded-2xl border border-slate-100 overflow-hidden">
-                                <div className="h-28 relative">
-                                    {p.image_url ? (
-                                        <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <ProductImageFallback category={p.category} />
-                                    )}
+                                <div className="h-28 relative bg-slate-50">
+                                    <ProductImage src={p.image_url} alt={p.name} category={p.category} />
+
                                     {!p.is_active && (
                                         <span className="absolute top-2 right-2 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-500 text-white shadow-sm">
                                             Inactive
@@ -77,6 +74,9 @@ const MyProductsSection = () => {
                                         {p.category || 'Uncategorized'}
                                     </p>
                                     <h3 className="font-bold text-slate-900 text-sm">{p.name}</h3>
+                                    {p.model_number && (
+                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{p.model_number}</p>
+                                    )}
                                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description || 'No description provided.'}</p>
                                 </div>
                             </div>

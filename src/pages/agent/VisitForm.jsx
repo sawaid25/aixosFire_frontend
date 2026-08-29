@@ -183,11 +183,14 @@ const VisitForm = () => {
     try {
       const { data, error } = await supabase
         .from('partner_products')
-        .select('product_id, products!inner(id, name, description, image_url, category, is_active)')
+        .select('product_id, products!inner(id, name, model_number, description, image_url, is_active, categories(name))')
         .eq('partner_id', partnerId)
         .eq('products.is_active', true);
       if (error) throw error;
-      const products = (data || []).map(row => row.products).filter(Boolean);
+      const products = (data || [])
+        .map(row => row.products)
+        .filter(Boolean)
+        .map(p => ({ ...p, category: p.categories?.name || 'Other' }));
       setPartnerProductsCache(prev => ({ ...prev, [partnerId]: products }));
     } catch (err) {
       console.error('Error fetching partner products:', err);
@@ -209,6 +212,15 @@ const VisitForm = () => {
     const products = partnerProductsCache[ext.partner] || [];
     const selected = products.find(p => p.id === ext.productId);
 
+    // Group by category so the Agent picks within the right family of
+    // equipment instead of scanning one long flat list.
+    const grouped = products.reduce((acc, p) => {
+      const key = p.category || 'Other';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(p);
+      return acc;
+    }, {});
+
     return (
       <div className="md:col-span-4">
         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
@@ -228,8 +240,14 @@ const VisitForm = () => {
               className="input-field py-2 text-sm"
             >
               <option value="">No specific product</option>
-              {products.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              {Object.entries(grouped).map(([category, items]) => (
+                <optgroup key={category} label={category}>
+                  {items.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             {selected?.description && (

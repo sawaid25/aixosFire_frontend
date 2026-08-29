@@ -1,32 +1,65 @@
 import React from 'react';
-import { Flame, Droplet, Bell, Siren, Gauge, Waves, Cylinder, Package } from 'lucide-react';
+import {
+    Flame, Droplet, Bell, Siren, Gauge, Waves, Cylinder, Package,
+    Lightbulb, Volume2, Cable, ShowerHead, Beaker, Wind, Milestone,
+} from 'lucide-react';
 
 /**
  * Category-specific hero illustration shown when a product has no uploaded
  * image_url yet. Deliberately not a generic gray box — each category gets a
  * distinct gradient + layered icon composition so cards stay visually
  * identifiable at a glance. Replaced automatically once an admin uploads a
- * real photo (Products.jsx renders <img src={image_url}> instead when set).
+ * real photo (renders <img src={image_url}> instead when set).
  */
 const CATEGORY_STYLES = {
-    'Fire Fighting System': {
-        gradient: 'from-rose-500 to-red-600',
-        Icon: Flame,
-        Accent: Droplet,
-    },
     'Fire Alarm System': {
         gradient: 'from-amber-500 to-orange-600',
         Icon: Bell,
         Accent: Siren,
+    },
+    'Emergency Lighting & Central Monitoring': {
+        gradient: 'from-yellow-500 to-amber-600',
+        Icon: Lightbulb,
+        Accent: Milestone,
+    },
+    'Voice Evacuation System': {
+        gradient: 'from-purple-500 to-fuchsia-600',
+        Icon: Volume2,
+        Accent: Siren,
+    },
+    'Fire Resistant Cables': {
+        gradient: 'from-slate-600 to-slate-800',
+        Icon: Cable,
+        Accent: null,
     },
     'Fire Pumps': {
         gradient: 'from-blue-500 to-indigo-600',
         Icon: Gauge,
         Accent: Waves,
     },
-    Tanks: {
-        gradient: 'from-teal-500 to-cyan-600',
-        Icon: Cylinder,
+    'Automatic Sprinkler Head': {
+        gradient: 'from-sky-500 to-blue-600',
+        Icon: ShowerHead,
+        Accent: Droplet,
+    },
+    'Portable Fire Extinguishers': {
+        gradient: 'from-rose-500 to-red-600',
+        Icon: Flame,
+        Accent: Droplet,
+    },
+    'Special Suppression System': {
+        gradient: 'from-cyan-600 to-teal-700',
+        Icon: Wind,
+        Accent: Cylinder,
+    },
+    'Foam System': {
+        gradient: 'from-teal-500 to-emerald-600',
+        Icon: Beaker,
+        Accent: Droplet,
+    },
+    Valves: {
+        gradient: 'from-orange-600 to-red-700',
+        Icon: Gauge,
         Accent: Droplet,
     },
 };

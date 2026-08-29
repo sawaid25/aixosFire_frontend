@@ -3,8 +3,9 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '../../supabaseClient';
 import L from 'leaflet';
-import { User, Briefcase } from 'lucide-react';
+import { User, Briefcase, ArrowRight } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
+import { Link } from 'react-router-dom';
 import PageLoader from '../../components/PageLoader';
 
 // Custom Icons
@@ -108,9 +109,15 @@ const GlobalMap = () => {
                     {data.customers.map(cust => (
                         <Marker key={`c-${cust.id}`} position={[cust.location_lat, cust.location_lng]} icon={customerIcon}>
                             <Popup>
-                                <div className="p-2">
+                                <div className="p-2 min-w-[160px]">
                                     <h3 className="font-bold text-slate-900">{cust.business_name}</h3>
-                                    <p className="text-xs text-slate-500">{cust.address}</p>
+                                    <p className="text-xs text-slate-500 mb-3">{cust.address}</p>
+                                    <Link
+                                        to={`/admin/customers/${cust.id}`}
+                                        className="inline-flex items-center justify-center gap-1.5 w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+                                    >
+                                        View Details <ArrowRight size={12} />
+                                    </Link>
                                 </div>
                             </Popup>
                         </Marker>

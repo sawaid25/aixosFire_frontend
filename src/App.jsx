@@ -41,6 +41,9 @@ import Analytics from './pages/admin/Analytics';
 import Partners from './pages/admin/Partners';
 import PartnerProfile from './pages/admin/PartnerProfile';
 import Products from './pages/admin/Products';
+import CategoryProducts from './pages/admin/CategoryProducts';
+import AdminProductDetail from './pages/admin/AdminProductDetail';
+import BulkImportProducts from './pages/admin/BulkImportProducts';
 import Operations from './pages/admin/Operations';
 import Reports from './pages/admin/Reports';
 import InquiryList from './pages/admin/InquiryList';
@@ -142,6 +145,9 @@ function App() {
                   <Route path="partners" element={<Partners />} />
                   <Route path="partners/:id" element={<PartnerProfile />} />
                   <Route path="products" element={<Products />} />
+                  <Route path="products/bulk-import" element={<BulkImportProducts />} />
+                  <Route path="products/:categoryId" element={<CategoryProducts />} />
+                  <Route path="products/:categoryId/:productId" element={<AdminProductDetail />} />
                   <Route path="map" element={<GlobalMap />} />
                   <Route path="services" element={<AdminServices />} />
                   <Route path="operations" element={<Operations />} />
