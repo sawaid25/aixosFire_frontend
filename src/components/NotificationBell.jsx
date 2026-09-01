@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { fetchCustomerInquiries, fetchCustomerQuotations } from '../api/customerPortal';
 import { getComplaintUnreadCountForAdmin, getComplaintUnreadCountForUser } from '../api/complaintsApi';
 import { Link, useNavigate } from 'react-router-dom';
+import { invalidatePartnerProducts } from '../hooks/usePartnerProducts';
 
 const EXPIRY_DAYS = 10;
 
@@ -426,11 +427,13 @@ const NotificationBell = ({ onOpenChat }) => {
                 }, (payload) => {
                     console.log('[NotificationBell] partner/admin notification received:', payload.new);
                     const n = payload.new;
+                    const isProductAssigned = n.notification_type === 'product_assigned' || n.type === 'product_assigned';
+                    if (isProductAssigned) invalidatePartnerProducts();
                     appendNotification(n, (n) => ({
                         id: `notif-${n.id}`,
-                        title: 'System alert',
+                        title: isProductAssigned ? 'New Product Assigned' : 'System alert',
                         message: n.message,
-                        type: 'message',
+                        type: isProductAssigned ? 'product_assigned' : 'message',
                         timestamp: n.created_at,
                         isRead: false,
                     }));
@@ -516,7 +519,8 @@ const NotificationBell = ({ onOpenChat }) => {
             });
         }
         if (notification.type === 'product_assigned') {
-            navigate('/partner/dashboard');
+            invalidatePartnerProducts(); // pull the freshly-assigned product on landing
+            navigate('/partner/products');
             setIsOpen(false);
             return;
         }

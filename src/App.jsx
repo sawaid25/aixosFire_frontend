@@ -61,6 +61,9 @@ import SiteAssessmentFormPage from './pages/partner/SiteAssessmentFormPage';
 import StickersUsagePage from './pages/partner/StickersUsagePage';
 import AiAgentPage from './pages/partner/AiAgentPage';
 import PartnerComplaintPage from './pages/partner/ComplaintPage';
+import ManageProducts from './pages/partner/ManageProducts';
+import PartnerCategoryProducts from './pages/partner/PartnerCategoryProducts';
+import PartnerProductDetail from './pages/partner/PartnerProductDetail';
 
 
 
@@ -166,6 +169,9 @@ function App() {
               <ProtectedRoute allowedRoles={['partner']}>
                 <Routes>
                   <Route path="dashboard" element={<PartnerDashboard />} />
+                  <Route path="products" element={<ManageProducts />} />
+                  <Route path="products/:categoryId" element={<PartnerCategoryProducts />} />
+                  <Route path="products/:categoryId/:productId" element={<PartnerProductDetail />} />
                   <Route path="stickers" element={<StickersUsagePage />} />
                   <Route path="ai-agent" element={<AiAgentPage />} />
                   <Route path="complaint" element={<PartnerComplaintPage />} />

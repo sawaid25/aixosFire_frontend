@@ -126,6 +126,7 @@ const Layout = ({ children }) => {
         } else if (role === 'partner') {
             return [
                 { icon: LayoutDashboard, label: 'Partner Dashboard', to: '/partner/dashboard' },
+                { icon: Package, label: 'Manage Products', to: '/partner/products' },
                 { icon: Tag, label: 'Stickers usage', to: '/partner/stickers' },
                 { icon: Bot, label: 'AI Agent', to: '/partner/ai-agent' },
                 { icon: MessageSquare, label: 'Complaint', to: '/partner/complaint' },
