@@ -73,6 +73,73 @@ const CertificateCard = ({ item }) => {
     );
 };
 
+const LicenseCertificateCard = ({ item }) => {
+    return (
+        <div className="bg-white rounded-3xl p-6 shadow-soft border border-slate-100 items-start flex flex-col h-full relative overflow-hidden group hover:shadow-lg transition-all">
+            <div className="absolute -right-8 -bottom-8 opacity-5 transform rotate-[-15deg] pointer-events-none">
+                <ShieldCheck size={180} />
+            </div>
+
+            <div className="flex justify-between w-full items-start mb-6 z-10">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                        <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-slate-900 leading-tight">License Renewal</h3>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">CERTIFIED</p>
+                    </div>
+                </div>
+                <div className="bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase">
+                    VALID
+                </div>
+            </div>
+
+            <div className="space-y-4 w-full z-10 flex-1">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="grid grid-cols-2 gap-y-4 text-sm">
+                        <div>
+                            <span className="block text-xs text-slate-400 font-semibold uppercase">License Number</span>
+                            <span className="font-mono font-bold text-slate-700">{item.license_number || '—'}</span>
+                        </div>
+                        <div>
+                            <span className="block text-xs text-slate-400 font-semibold uppercase">Authority</span>
+                            <span className="font-bold text-slate-700">{item.license_authority || '—'}</span>
+                        </div>
+                        <div className="col-span-2">
+                            <span className="block text-xs text-slate-400 font-semibold uppercase">Renewal Date</span>
+                            <span className="font-bold text-green-600">{formatDateSafe(item.license_renewal_date)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="w-full mt-6 pt-6 border-t border-slate-100 z-10 flex gap-2">
+                {item.license_document_url ? (
+                    <a
+                        href={item.license_document_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-slate-900 text-white rounded-xl py-2.5 text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
+                    >
+                        <Download size={16} /> Document
+                    </a>
+                ) : (
+                    <button
+                        onClick={() => alert(`Downloading Certificate #${item.id}...`)}
+                        className="flex-1 bg-slate-900 text-white rounded-xl py-2.5 text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
+                    >
+                        <Download size={16} /> PDF
+                    </button>
+                )}
+                <button className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-all">
+                    <Printer size={18} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const Certificates = () => {
     const { user } = useAuth();
     const [inventory, setInventory] = useState([]);
@@ -88,8 +155,14 @@ const Certificates = () => {
                     .eq('customer_id', user.id);
 
                 if (error) throw error;
-                // Only showing Valid items
-                const validItems = (data || []).filter(item => hasValidDate(item.expiry_date) && new Date(item.expiry_date) > new Date());
+                // Equipment certificates only show while unexpired; License Renewal has no
+                // expiry concept any more (license_renewal_date is the only date it carries),
+                // so it's shown whenever a renewal record exists, not gated on a future date.
+                const validItems = (data || []).filter(item => (
+                    item.validation_mode === 'license-renewal'
+                        ? hasValidDate(item.license_renewal_date)
+                        : hasValidDate(item.expiry_date) && new Date(item.expiry_date) > new Date()
+                ));
                 setInventory(validItems);
             } catch (err) {
                 console.error("Failed to fetch Inventory", err);
@@ -99,6 +172,9 @@ const Certificates = () => {
         };
         if (user) fetchInventory();
     }, [user]);
+
+    const equipmentCertificates = inventory.filter(item => item.validation_mode !== 'license-renewal');
+    const licenseCertificates = inventory.filter(item => item.validation_mode === 'license-renewal');
 
     return (
         <div className="relative min-h-[400px] space-y-6">
@@ -123,8 +199,11 @@ const Certificates = () => {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {inventory.map((item) => (
+                    {equipmentCertificates.map((item) => (
                         <CertificateCard key={item.id} item={item} />
+                    ))}
+                    {licenseCertificates.map((item) => (
+                        <LicenseCertificateCard key={item.id} item={item} />
                     ))}
                 </div>
             )}

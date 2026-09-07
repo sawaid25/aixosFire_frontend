@@ -24,8 +24,28 @@ const formatSerialRange = (serialNos) => {
     return min === max ? String(min) : `${min}–${max}`;
 };
 
-const normalizeUtilizationRows = (inquiry) => {
+/** A license-renewal sub-mode item isn't a physical extinguisher unit — keep it out of the equipment breakdown. */
+const isLicenseRenewalItem = (item) => item?.validation_mode === 'license-renewal';
+
+/**
+ * License-renewal items captured inside a Validation inquiry — shown as their
+ * own list rather than grouped into the equipment utilization breakdown below.
+ */
+const buildLicenseRenewalRows = (inquiry) => {
     const items = inquiry.inquiry_items;
+    if (!Array.isArray(items) || items.length === 0) return [];
+    return items.filter(isLicenseRenewalItem).map((item) => ({
+        itemId: item.id,
+        licenseNumber: item.license_number || null,
+        licenseAuthority: item.license_authority || null,
+        renewalDate: item.license_renewal_date || null,
+        notes: item.license_notes || null,
+        documentUrl: item.license_document_url || null,
+    }));
+};
+
+const normalizeUtilizationRows = (inquiry) => {
+    const items = (inquiry.inquiry_items || []).filter((item) => !isLicenseRenewalItem(item));
     if (!Array.isArray(items) || items.length === 0) return [];
 
     const groups = new Map();
@@ -68,6 +88,7 @@ export const buildValidationInquiryViewModel = (inquiry) => {
             agentNotes: '',
             status: '—',
             utilizationRows: [],
+            licenseRenewals: [],
             customerEmail: null,
             customerPhone: null,
             customerOwnerName: null,
@@ -127,6 +148,7 @@ export const buildValidationInquiryViewModel = (inquiry) => {
         agentNotes,
         status: inquiry.status || '—',
         utilizationRows: normalizeUtilizationRows(inquiry),
+        licenseRenewals: buildLicenseRenewalRows(inquiry),
         customerEmail: customers.email || inquiry.customer_email || null,
         customerPhone: customers.phone || inquiry.customer_phone || null,
         customerOwnerName: customers.owner_name || inquiry.customer_owner_name || null,

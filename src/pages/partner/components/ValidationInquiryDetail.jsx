@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Calendar, MapPin, Tag, User, MessageCircle, ChevronDown, ChevronUp, Mic, CheckCircle2, XCircle, PlayCircle, Loader2 } from 'lucide-react';
+import { FileText, Calendar, MapPin, Tag, User, MessageCircle, ChevronDown, ChevronUp, Mic, CheckCircle2, XCircle, PlayCircle, Loader2, ShieldCheck } from 'lucide-react';
 import CustomerContactSection from './CustomerContactSection';
 
 const STATUS_CARD_STYLE = {
@@ -24,6 +24,12 @@ const STATUS_LABEL = {
     in_progress: 'In Progress',
     completed: 'Completed',
     rejected: 'Rejected',
+};
+
+const VALIDATION_MODE_LABEL = {
+    new: 'New Validation',
+    followup: 'Follow-up',
+    'license-renewal': 'License Renewal',
 };
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleDateString() : null);
@@ -54,7 +60,7 @@ const buildItemDetailFields = (detail) => {
         detail.seller && { label: 'Seller', value: detail.seller },
         { label: 'Status', value: detail.status },
         detail.condition && { label: 'Condition', value: detail.condition },
-        { label: 'Validation Mode', value: detail.validation_mode },
+        { label: 'Validation Mode', value: VALIDATION_MODE_LABEL[detail.validation_mode] || detail.validation_mode },
         detail.performed_by && { label: 'Logged By', value: detail.performed_by },
         detail.quantity != null && { label: 'Quantity', value: `${detail.quantity}${detail.unit ? ` ${detail.unit}` : ''}` },
         detail.accepted_quantity != null && { label: 'Accepted Quantity', value: `${detail.accepted_quantity}${detail.unit ? ` ${detail.unit}` : ''}` },
@@ -86,6 +92,7 @@ const ValidationInquiryDetail = ({
         agentNotes,
         status,
         utilizationRows,
+        licenseRenewals,
         customerEmail,
         customerPhone,
         customerOwnerName,
@@ -415,6 +422,45 @@ const ValidationInquiryDetail = ({
                         </table>
                     </div>
                 </div>
+
+                {/* License Renewals — recorded on this visit, separate from the equipment breakdown above */}
+                {licenseRenewals?.length > 0 && (
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-3">
+                            <ShieldCheck size={22} className="text-primary-500" />
+                            License Renewals
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {licenseRenewals.map((lic) => (
+                                <div key={lic.itemId} className="bg-white rounded-2xl border border-slate-100 p-5">
+                                    <div className="grid grid-cols-3 gap-5">
+                                        <DetailCell label="License Number" value={lic.licenseNumber} />
+                                        <DetailCell label="Issuing Authority" value={lic.licenseAuthority} />
+                                        <DetailCell label="Renewal Date" value={fmtDate(lic.renewalDate)} />
+                                    </div>
+                                    {lic.notes && (
+                                        <p className="text-sm text-slate-600 italic leading-relaxed mt-4 pt-4 border-t border-slate-100">"{lic.notes}"</p>
+                                    )}
+                                    {lic.documentUrl && (
+                                        <a
+                                            href={lic.documentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="License document"
+                                            className="inline-block mt-4"
+                                        >
+                                            <img
+                                                src={lic.documentUrl}
+                                                alt="License document"
+                                                className="h-20 w-20 object-cover rounded-xl border border-slate-200 shadow-sm hover:opacity-90 transition-opacity"
+                                            />
+                                        </a>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

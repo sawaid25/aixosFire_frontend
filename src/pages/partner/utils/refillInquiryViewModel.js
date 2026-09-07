@@ -23,13 +23,33 @@ const sumItemQuantities = (items) => {
   return items.reduce((acc, item) => acc + num(item.quantity, 0), 0);
 };
 
+/** A license-renewal sub-mode item isn't a physical refill — no kg, no per-kg price. */
+const isLicenseRenewalItem = (item) => item?.validation_mode === 'license-renewal';
+
+/**
+ * License-renewal items captured inside a Refill inquiry — shown as a separate,
+ * non-billable list rather than mixed into the kg-based refill lines below.
+ */
+export const buildLicenseRenewalLines = (inquiry) => {
+  if (!inquiry || typeof inquiry !== 'object') return [];
+  const items = inquiry.inquiry_items || [];
+  return items.filter(isLicenseRenewalItem).map((item) => ({
+    itemId: item.id,
+    licenseNumber: item.license_number || null,
+    licenseAuthority: item.license_authority || null,
+    renewalDate: item.license_renewal_date || null,
+    notes: item.license_notes || null,
+    documentUrl: item.license_document_url || null,
+  }));
+};
+
 /**
  * Build per-line refill rows with service name from type or system.
  */
 export const buildRefillLines = (inquiry, pricingRows = []) => {
   if (!inquiry || typeof inquiry !== 'object') return [];
-  const items = inquiry.inquiry_items || [];
-  
+  const items = (inquiry.inquiry_items || []).filter((item) => !isLicenseRenewalItem(item));
+
   const deliveryMode = inquiry.delivery_mode || null;
   const deliveryDeduction = deliveryMode === 'agent' ? num(inquiry.delivery_charge_per_kg, 2) : 0;
 
@@ -99,6 +119,7 @@ export const buildRefillInquiryViewModel = (inquiry, pricingRows = []) => {
       inquiryId: null,
       agentId: null,
       refillLines: [],
+      licenseRenewals: [],
       transportFlatSar: 0,
     };
   }
@@ -116,7 +137,7 @@ export const buildRefillInquiryViewModel = (inquiry, pricingRows = []) => {
       inquiry.total_cylinders ??
       inquiry.total_quantity ??
       inquiry.cylinder_count,
-    sumItemQuantities(inquiry.inquiry_items)
+    sumItemQuantities((inquiry.inquiry_items || []).filter((item) => !isLicenseRenewalItem(item)))
   );
 
   const pricing = inquiry.refill_pricing || inquiry.pricing || inquiry.price_breakdown || {};
@@ -178,6 +199,7 @@ export const buildRefillInquiryViewModel = (inquiry, pricingRows = []) => {
     inquiryId,
     agentId,
     refillLines,
+    licenseRenewals: buildLicenseRenewalLines(inquiry),
     transportFlatSar,
     deliveryMode: inquiry.delivery_mode || null,
     deliveryStatus: inquiry.delivery_status || 'pending',

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Filter, QrCode, AlertTriangle, CheckCircle, FireExtinguisher, Calendar, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, QrCode, AlertTriangle, CheckCircle, FireExtinguisher, Calendar, ArrowUpRight, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageLoader from '../../components/PageLoader';
 
@@ -40,7 +40,12 @@ const Inventory = () => {
         if (user) fetchInventory();
     }, [user]);
 
-    const filteredInventory = inventory.filter(item => {
+    // License renewals aren't physical equipment — kept out of the asset table below,
+    // shown in their own "Licenses" section instead.
+    const equipmentItems = inventory.filter(item => item.validation_mode !== 'license-renewal');
+    const licenseItems = inventory.filter(item => item.validation_mode === 'license-renewal');
+
+    const filteredInventory = equipmentItems.filter(item => {
         const matchesSearch = item.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.id?.toString().includes(searchTerm);
 
@@ -157,6 +162,49 @@ const Inventory = () => {
                     </div>
                 )}
             </div>
+
+            {licenseItems.length > 0 && (
+                <div className="bg-white rounded-3xl shadow-soft border border-slate-100 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100">
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                            <ShieldCheck size={20} className="text-primary-500" /> Licenses
+                        </h2>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/50 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-100">
+                                    <th className="px-6 py-4">License Number</th>
+                                    <th className="px-6 py-4">Issuing Authority</th>
+                                    <th className="px-6 py-4">Renewal Date</th>
+                                    <th className="px-6 py-4">Document</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {licenseItems.map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 font-semibold text-slate-900">{item.license_number || '—'}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">{item.license_authority || '—'}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">{formatDateSafe(item.license_renewal_date)}</td>
+                                        <td className="px-6 py-4 text-sm">
+                                            {item.license_document_url ? (
+                                                <a
+                                                    href={item.license_document_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-primary-600 font-semibold hover:underline"
+                                                >
+                                                    View
+                                                </a>
+                                            ) : '—'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

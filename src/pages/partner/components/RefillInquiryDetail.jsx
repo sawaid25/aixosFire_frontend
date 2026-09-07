@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Split, Truck, Info, XCircle, MessageCircle, ChevronLeft, Loader2, Beaker, Calendar, Clock, CheckCircle2, User, Package } from 'lucide-react';
+import { Split, Truck, Info, XCircle, MessageCircle, ChevronLeft, Loader2, Beaker, Calendar, Clock, CheckCircle2, User, Package, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import { finalizeRefillAcceptance } from '../../../api/partnerRefill';
@@ -42,6 +42,7 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
     customerLocationLat,
     customerLocationLng,
     refillLines: modelLines,
+    licenseRenewals,
     transportFlatSar,
     inquiryId,
     agentId,
@@ -452,6 +453,46 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
               </div>
             </div>
           </div>
+
+          {licenseRenewals?.length > 0 && (
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <ShieldCheck size={20} className="text-primary-500" /> License Renewals
+              </h3>
+              <p className="text-xs text-slate-500 mb-4 -mt-2">
+                Recorded on this visit — not billed as a refill.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {licenseRenewals.map((lic) => (
+                  <div key={lic.itemId} className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <DetailField label="License Number" value={lic.licenseNumber} />
+                      <DetailField label="Issuing Authority" value={lic.licenseAuthority} />
+                      <DetailField label="Renewal Date" value={formatDate(lic.renewalDate)} />
+                    </div>
+                    {lic.notes && (
+                      <p className="text-sm text-slate-600 italic leading-relaxed">"{lic.notes}"</p>
+                    )}
+                    {lic.documentUrl && (
+                      <a
+                        href={lic.documentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block"
+                        title="License document"
+                      >
+                        <img
+                          src={lic.documentUrl}
+                          alt="License document"
+                          className="h-20 w-20 object-cover rounded-xl border border-slate-200 shadow-sm hover:opacity-90 transition-opacity"
+                        />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-end">
             <div>

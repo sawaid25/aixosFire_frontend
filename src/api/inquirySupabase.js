@@ -55,15 +55,17 @@ export async function createInquiryViaSupabase(inquiryData, items) {
 
   const normalizedType = normalizeStickerUsedFor(inquiryData?.type);
 
-  // A validation inquiry made up entirely of follow-up items doesn't consume
-  // a partner sticker (it's a re-check of an already-validated unit, not a
-  // fresh validation), so a partner isn't mandatory for it — unlike a new
-  // validation or a refill, which always requires one.
+  // A validation or refill inquiry made up entirely of follow-up and/or license
+  // renewal items doesn't consume a partner sticker (it's a re-check of an
+  // already-validated/refilled unit, or a compliance record — not a fresh
+  // validation/refill), so a partner isn't mandatory for it — unlike a new
+  // validation/refill, which always requires one.
+  const PARTNER_OPTIONAL_SUBMODES = new Set(['followup', 'license-renewal']);
   const itemsArr = Array.isArray(items) ? items : [];
   const isFollowupOnlyValidation =
-    normalizedType === 'validation' &&
+    (normalizedType === 'validation' || normalizedType === 'refilled') &&
     itemsArr.length > 0 &&
-    itemsArr.every((it) => (it.validation_mode ?? 'new') === 'followup');
+    itemsArr.every((it) => PARTNER_OPTIONAL_SUBMODES.has(it.validation_mode ?? 'new'));
 
   if (normalizedType && !inquiryData?.partner_id && !isFollowupOnlyValidation) {
     const err = new Error('Partner is required for this inquiry type');
@@ -188,6 +190,11 @@ export async function createInquiryViaSupabase(inquiryData, items) {
       validation_mode: it.validation_mode ?? 'new',
       follow_up_date: it.follow_up_date ?? null,
       follow_up_date_validation: it.follow_up_date_validation ?? null,
+      license_number: it.license_number ?? null,
+      license_authority: it.license_authority ?? null,
+      license_renewal_date: it.license_renewal_date ?? null,
+      license_notes: it.license_notes ?? null,
+      license_document_url: it.license_document_url ?? null,
     };
     if (it.condition != null) row.condition = it.condition;
     return row;

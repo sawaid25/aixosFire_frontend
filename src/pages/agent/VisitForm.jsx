@@ -127,6 +127,9 @@ const getDefaultUnit = (material) => {
   return 'Pieces';
 };
 
+/** Which sub-modes call for a site QR scan — 'followup' is exempt for both Validation and Refill. */
+const SUBMODE_NEEDS_QR = { new: true, 'license-renewal': true, followup: false };
+
 const VisitForm = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -205,6 +208,20 @@ const VisitForm = () => {
     fetchPartnerProducts(partnerId);
   };
 
+  /** Category names actually assigned to this Partner (via partner_products), for the New Unit / Maintenance System Category select. */
+  const getPartnerAssignedCategories = (partnerId) => {
+    if (!partnerId || partnerId === 'Other') return [];
+    const products = partnerProductsCache[partnerId] || [];
+    return Array.from(new Set(products.map(p => p.category || 'Other'))).sort();
+  };
+
+  /** Assigned products within one category, for the New Unit / Maintenance Material select. */
+  const getPartnerAssignedMaterials = (partnerId, category) => {
+    if (!partnerId || partnerId === 'Other' || !category || category === 'Other') return [];
+    const products = partnerProductsCache[partnerId] || [];
+    return products.filter(p => (p.category || 'Other') === category);
+  };
+
   /** Product picker shown once a real (non-"Other") Partner is selected — only that Partner's active assigned products appear. */
   const renderProductPicker = (ext, index) => {
     if (!ext.partner || ext.partner === 'Other') return null;
@@ -227,10 +244,17 @@ const VisitForm = () => {
           Assigned Product <span className="normal-case text-slate-400">(optional)</span>
         </label>
         {isLoading ? (
-          <div className="input-field py-2 text-sm text-slate-400">Loading assigned products…</div>
+          <div className="input-field py-2 text-sm text-slate-400 flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
+            Loading available products…
+          </div>
         ) : products.length === 0 ? (
-          <div className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-            This partner has no active products assigned yet. Continue with the fields above, or ask Admin to assign products to this partner.
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <p className="font-bold uppercase tracking-wide">No Products Assigned</p>
+            <p className="mt-0.5 font-medium">
+              This Partner does not have any products assigned yet. You can still continue without a
+              specific product, or ask Admin to assign products to this partner.
+            </p>
           </div>
         ) : (
           <>
@@ -259,6 +283,146 @@ const VisitForm = () => {
     );
   };
 
+
+  /**
+   * Shared field set for the "License Renewal" sub-mode, used by both
+   * Validation and Refill blocks (identical requirements: partner + sticker,
+   * same license fields) — kept as one closure to avoid duplicating the JSX.
+   * `slotKeyPrefix` keeps the inline QR-scanner slot unique per mode (e.g.
+   * `lv-0` for Validation, `lr-0` for Refill).
+   */
+  const renderLicenseRenewalFields = (ext, index, slotKeyPrefix) => (
+    <>
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+          Partner <span className="normal-case text-slate-400">(optional)</span>
+        </label>
+        <select
+          value={ext.partner || ''}
+          onChange={(e) => handlePartnerSelect(index, e.target.value)}
+          className="input-field py-2 text-sm"
+        >
+          <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
+          {partners.map(p => (
+            <option key={p.id} value={p.id}>{p.business_name}</option>
+          ))}
+          <option value="Other">Other (Custom Partner)</option>
+        </select>
+        {ext.partner === 'Other' && (
+          <div className="mt-3 animate-fade-in">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+              Specify Partner Name
+            </label>
+            <input
+              type="text"
+              value={ext.customPartner || ''}
+              onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+              placeholder="e.g. ABC Fire Refilling Co."
+              className="input-field py-2 text-sm"
+            />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">License Number</label>
+        <input
+          type="text"
+          required
+          value={ext.licenseNumber || ''}
+          onChange={(e) => handleExtinguisherChange(index, 'licenseNumber', e.target.value)}
+          placeholder="e.g. CD-2026-00123"
+          className="input-field py-2 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Issuing Authority</label>
+        <input
+          type="text"
+          required
+          value={ext.licenseAuthority || ''}
+          onChange={(e) => handleExtinguisherChange(index, 'licenseAuthority', e.target.value)}
+          placeholder="e.g. Civil Defense"
+          className="input-field py-2 text-sm"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Renewal Date</label>
+        <input
+          type="date"
+          required
+          value={ext.licenseRenewalDate || ''}
+          onChange={(e) => handleExtinguisherChange(index, 'licenseRenewalDate', e.target.value)}
+          className="input-field py-2 text-sm"
+        />
+      </div>
+
+      <div className="md:col-span-2">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+          Notes <span className="normal-case text-slate-400">(optional)</span>
+        </label>
+        <textarea
+          value={ext.licenseNotes || ''}
+          onChange={(e) => handleExtinguisherChange(index, 'licenseNotes', e.target.value)}
+          rows={2}
+          placeholder="Any additional detail about this renewal..."
+          className="input-field py-2 text-sm resize-none"
+        />
+      </div>
+
+      <div className="md:col-span-3">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+          License Document <span className="normal-case text-slate-400">(optional)</span>
+        </label>
+        <div className="relative flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed rounded-2xl transition-all bg-white border-slate-300 hover:border-primary-500 hover:bg-primary-50/10 cursor-pointer overflow-hidden">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => handleLicensePhotoUpload(index, e)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+          />
+          {ext.licensePhoto ? (
+            <div className="relative w-full p-2 flex flex-col items-center animate-fade-in pointer-events-none">
+              <img
+                src={URL.createObjectURL(ext.licensePhoto)}
+                className="h-24 w-24 object-cover rounded-xl shadow-md border-2 border-white mb-2"
+                alt="Preview"
+              />
+              <div className="flex items-center gap-1.5 text-xs font-bold text-primary-600 uppercase tracking-wider">
+                <Camera size={14} />
+                Change Photo
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5 font-medium">
+                Final size: {(ext.licensePhoto.size / 1024).toFixed(2)} KB (max 45 KB)
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center p-6 text-center animate-fade-in pointer-events-none">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3 hover:scale-110 transition-transform">
+                <Camera size={24} className="text-slate-400" />
+              </div>
+              <p className="text-sm font-bold text-slate-700 mb-1">Add License Document</p>
+              <p className="text-xs text-slate-500">Take a photo or upload from gallery</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <QrScanFieldGroup
+        slotKey={`${slotKeyPrefix}-${index}`}
+        qrScannerSlot={qrScannerSlot}
+        onQrScannerSlotChange={setQrScannerSlot}
+        readerId={`visit-qr-${slotKeyPrefix}-${index}`}
+        qrCodeValue={ext.qrCodeValue || ''}
+        needsQrScan={needsQrScan}
+        isQrValid={(ext.qrCodeValue || '') === EXPECTED_VISIT_QR}
+        onDecoded={(text) => handleQrDecoded(text, index)}
+        hint="Scan the site verification QR after uploading the license document (optional)."
+      />
+    </>
+  );
 
   const FIRE_SYSTEMS = {
     firefighting: [
@@ -372,6 +536,11 @@ const VisitForm = () => {
       validation_mode: 'new',
       validationFollowUpDate: '',
       qrCodeValue: '',
+      licenseNumber: '',
+      licenseAuthority: '',
+      licenseRenewalDate: '',
+      licenseNotes: '',
+      licensePhoto: null,
     }
   ]);
 
@@ -384,8 +553,8 @@ const VisitForm = () => {
     () =>
       extinguishers.some(
         (ext) =>
-          ext.mode === 'Refill' ||
-          (ext.mode === 'Validation' && (ext.validation_mode || 'new') === 'new')
+          (ext.mode === 'Refill' || ext.mode === 'Validation') &&
+          SUBMODE_NEEDS_QR[ext.validation_mode || 'new']
       ),
     [extinguishers]
   );
@@ -750,12 +919,36 @@ const VisitForm = () => {
 
         // Mode change should ALWAYS be allowed and should unlock/reset validation
         if (field === 'mode') {
-          return { ...item, mode: value, isLocked: false, hasChanges: false, price: 180 };
+          return {
+            ...item,
+            mode: value,
+            isLocked: false,
+            hasChanges: false,
+            price: 180,
+            validation_mode: 'new',
+            licenseNumber: '',
+            licenseAuthority: '',
+            licenseRenewalDate: '',
+            licenseNotes: '',
+            licensePhoto: null,
+          };
         }
 
         // Photo uploads are always allowed regardless of lock state — each unit owns its photo independently
-        if (field === 'validationPhoto') {
-          return { ...item, validationPhoto: value };
+        if (field === 'validationPhoto' || field === 'licensePhoto') {
+          return { ...item, [field]: value };
+        }
+
+        // Switching the New/Follow-up/License Renewal sub-mode must ALWAYS be allowed too —
+        // same reasoning as 'mode' above. Previously this fell through to the "blocked if
+        // locked" check below, so clicking a sub-mode pill after the 8s auto-lock kicked in
+        // silently did nothing, leaving whatever sub-mode was active before (e.g. the agent
+        // meant to create a License Renewal but it silently stayed on Follow-up).
+        if (field === 'validation_mode') {
+          const cleared = value !== 'license-renewal'
+            ? { licenseNumber: '', licenseAuthority: '', licenseRenewalDate: '', licenseNotes: '', licensePhoto: null }
+            : {};
+          return { ...item, validation_mode: value, isLocked: false, hasChanges: false, ...cleared };
         }
 
         // Other fields blocked if locked
@@ -817,6 +1010,11 @@ const VisitForm = () => {
       validation_mode: 'new',
       validationFollowUpDate: '',
       qrCodeValue: '',
+      licenseNumber: '',
+      licenseAuthority: '',
+      licenseRenewalDate: '',
+      licenseNotes: '',
+      licensePhoto: null,
     }]);
   };
 
@@ -997,6 +1195,16 @@ const VisitForm = () => {
     const compressed = await compressVisitImageFile(file);
     if (compressed) {
       handleExtinguisherChange(index, 'validationPhoto', compressed);
+    }
+  };
+
+  const handleLicensePhotoUpload = async (index, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const compressed = await compressVisitImageFile(file);
+    if (compressed) {
+      handleExtinguisherChange(index, 'licensePhoto', compressed);
     }
   };
 
@@ -1344,6 +1552,36 @@ const VisitForm = () => {
     }
   };
 
+  const uploadLicenseDocument = async (file, index) => {
+    if (!file) return null;
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `license-${Date.now()}-${index}.${fileExt}`;
+      const filePath = `licenses/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('photo-references')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('License document upload error:', uploadError);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('photo-references')
+        .getPublicUrl(filePath);
+
+      return urlData?.publicUrl || null;
+    } catch (err) {
+      console.error('License document upload failed:', err);
+      return null;
+    }
+  };
+
   const uploadSiteVoice = async (blob, visitId) => {
     if (!blob) return null;
 
@@ -1580,11 +1818,12 @@ const VisitForm = () => {
       const inquiryType = extinguishers[0]?.mode || 'General';
       const selectedPartnerId = uniquePartners[0] || null;
 
-      // Follow-up validation items don't require a partner — only enforce the
-      // requirement if at least one item actually needs one (e.g. a new
-      // validation or a refill).
+      // Follow-up and License Renewal items (Validation or Refill) don't require a
+      // partner — only enforce the requirement if at least one item actually needs
+      // one (a new validation/refill).
+      const PARTNER_OPTIONAL_SUBMODES = ['followup', 'license-renewal'];
       const hasItemRequiringPartner = extinguishers.some(ext =>
-        !(ext.mode === 'Validation' && ext.validation_mode === 'followup') &&
+        !(['Validation', 'Refill'].includes(ext.mode) && PARTNER_OPTIONAL_SUBMODES.includes(ext.validation_mode)) &&
         inquiryTypeNeedsPartner(ext.mode)
       );
 
@@ -1607,6 +1846,7 @@ const VisitForm = () => {
           let voiceUrl = null;
           let photoUrl = null;
           let refPhotoUrl = null;
+          let licenseDocUrl = null;
 
           if (item.mode === 'Maintenance') {
             if (item.maintenanceVoiceNote) {
@@ -1621,6 +1861,11 @@ const VisitForm = () => {
             refPhotoUrl = await uploadPhotoReference(item.validationPhoto, idx);
           }
 
+          const isLicenseRenewal = ['Validation', 'Refill'].includes(item.mode) && item.validation_mode === 'license-renewal';
+          if (isLicenseRenewal && item.licensePhoto) {
+            licenseDocUrl = await uploadLicenseDocument(item.licensePhoto, idx);
+          }
+
           // 1. Map the Main Unit of this block
           if (item.mode !== 'New Unit' && (item.material || item.firefightingSystem || item.type)) {
             allItemsPayload.push({
@@ -1632,21 +1877,29 @@ const VisitForm = () => {
               price: item.price || 180,
               unit: item.unit || 'Pieces',
               system: item.firefightingSystem || null,
-              status: item.mode === 'New Unit' ? 'New' : (item.mode === 'Refill' ? 'Refilled' : (item.mode === 'Validation' ? 'Valid' : 'Maintained')),
+              status: isLicenseRenewal ? 'License Renewed' : (item.mode === 'New Unit' ? 'New' : (item.mode === 'Refill' ? 'Refilled' : (item.mode === 'Validation' ? 'Valid' : 'Maintained'))),
               catalog_no: item.catalog_no || null,
               product_id: item.productId || null,
               maintenance_notes: item.maintenanceNotes || null,
               maintenance_voice_url: voiceUrl,
               maintenance_unit_photo_url: photoUrl,
               extinguisher_photo: refPhotoUrl,
-              expiry_date: item.expiryDate || null,
+              // License Renewal has no expiry-date input any more — license_renewal_date
+              // is the single source of truth for it, so this stays explicitly null
+              // rather than picking up whatever stale value the shared field might hold.
+              expiry_date: isLicenseRenewal ? null : (item.expiryDate || null),
               performed_by: formData.performedBy || 'Agent',
               is_sub_unit: false,
-              validation_mode: item.mode === 'Validation' ? (item.validation_mode || 'new') : 'new',
+              validation_mode: ['Validation', 'Refill'].includes(item.mode) ? (item.validation_mode || 'new') : 'new',
               follow_up_date: formData.followUpDate || null,
-              follow_up_date_validation: (item.mode === 'Validation' && item.validation_mode === 'followup')
+              follow_up_date_validation: (['Validation', 'Refill'].includes(item.mode) && item.validation_mode === 'followup')
                 ? (item.validationFollowUpDate || null)
-                : null
+                : null,
+              license_number: isLicenseRenewal ? (item.licenseNumber || null) : null,
+              license_authority: isLicenseRenewal ? (item.licenseAuthority || null) : null,
+              license_renewal_date: isLicenseRenewal ? (item.licenseRenewalDate || null) : null,
+              license_notes: isLicenseRenewal ? (item.licenseNotes || null) : null,
+              license_document_url: licenseDocUrl,
             });
           }
 
@@ -1668,6 +1921,7 @@ const VisitForm = () => {
                 system: sub.firefightingSystem || null,
                 status: 'New',
                 catalog_no: sub.catalog_no || null,
+                product_id: item.productId || null,
                 maintenance_notes: item.maintenanceNotes || null,
                 maintenance_voice_url: voiceUrl,
                 maintenance_unit_photo_url: photoUrl,
@@ -2446,7 +2700,7 @@ const VisitForm = () => {
                     <>
                       <div className="md:col-span-4 mb-4">
                         <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
-                          {['new', 'followup'].map((mode) => (
+                          {['new', 'followup', 'license-renewal'].map((mode) => (
                             <button
                               key={mode}
                               onClick={() => handleExtinguisherChange(index, 'validation_mode', mode)}
@@ -2455,7 +2709,7 @@ const VisitForm = () => {
                                 : 'text-slate-500 hover:text-slate-700'
                                 }`}
                             >
-                              {mode === 'new' ? 'New Validation' : 'Follow-up'}
+                              {mode === 'new' ? 'New Validation' : mode === 'followup' ? 'Follow-up' : 'License Renewal'}
                             </button>
                           ))}
                         </div>
@@ -2527,6 +2781,8 @@ const VisitForm = () => {
                             hint="Scan the site verification QR after the photo reference (optional)."
                           />
                         </>
+                      ) : ext.validation_mode === 'license-renewal' ? (
+                        renderLicenseRenewalFields(ext, index, 'lv')
                       ) : (
                         <>
                           <div>
@@ -2566,7 +2822,45 @@ const VisitForm = () => {
                     <div className="col-span-4 space-y-6 animate-fade-in">
 
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-end gap-4">
-                        {/* Fire Fighting System Category */}
+                        {/* Partner — chosen first, so System Category/Material can be limited to what's assigned to them */}
+                        <div>
+                          <label
+                            htmlFor={`partner-${index}`}
+                            className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
+                          >
+                            Partner
+                          </label>
+                          <select
+                            id={`partner-${index}`}
+                            value={ext.partner || ''}
+                            onChange={(e) => handlePartnerSelect(index, e.target.value)}
+                            className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                            disabled={loadingPartners || ext.isLocked}
+                          >
+                            <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
+                            {partners.map(p => (
+                              <option key={p.id} value={p.id}>{p.business_name}</option>
+                            ))}
+                            <option value="Other">Other (Custom Partner)</option>
+                          </select>
+                          {ext.partner === 'Other' && (
+                            <div className="mt-3 animate-fade-in">
+                              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                                Specify Partner Name
+                              </label>
+                              <input
+                                type="text"
+                                value={ext.customPartner || ''}
+                                onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+                                disabled={ext.isLocked}
+                                placeholder="e.g. ABC Fire Refilling Co."
+                                className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Fire Fighting System Category — limited to categories assigned to the selected Partner */}
                         <div>
                           <label
                             htmlFor={`ff-system-${index}`}
@@ -2581,12 +2875,17 @@ const VisitForm = () => {
                             disabled={ext.isLocked}
                             className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                           >
-                            <option value="">Select...</option>
-                            {Object.keys(FIRE_FIGHTING_CATEGORIES).map(sys => (
+                            <option value="">
+                              {!ext.partner ? 'Select Partner first' : loadingPartnerProducts[ext.partner] ? 'Loading...' : 'Select...'}
+                            </option>
+                            {getPartnerAssignedCategories(ext.partner).map(sys => (
                               <option key={sys} value={sys}>{sys}</option>
                             ))}
                             <option>Other</option>
                           </select>
+                          {ext.partner && ext.partner !== 'Other' && !loadingPartnerProducts[ext.partner] && getPartnerAssignedCategories(ext.partner).length === 0 && (
+                            <p className="text-xs text-amber-700 mt-1.5">No categories assigned to this Partner yet.</p>
+                          )}
                           {ext.firefightingSystem === 'Other' && (
                             <div className="mt-3 animate-fade-in">
                               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
@@ -2605,7 +2904,7 @@ const VisitForm = () => {
                           )}
                         </div>
 
-                        {/* Material */}
+                        {/* Material — limited to the selected Partner's assigned products within this category */}
                         <div>
                           <label
                             htmlFor={`material-${index}`}
@@ -2626,8 +2925,10 @@ const VisitForm = () => {
                           >
                             <option value="">Select Material</option>
                             {ext.firefightingSystem &&
-                              FIRE_FIGHTING_CATEGORIES[ext.firefightingSystem]?.map(mat => (
-                                <option key={mat} value={mat}>{mat}</option>
+                              getPartnerAssignedMaterials(ext.partner, ext.firefightingSystem).map(p => (
+                                <option key={p.id} value={p.name}>
+                                  {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
+                                </option>
                               ))}
                             <option>Other</option>
                           </select>
@@ -2707,38 +3008,6 @@ const VisitForm = () => {
                       </div>
 
                       <div className='col-span-4 grid grid-cols-1 md:grid-cols-4 gap-4'>
-                        <div>
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                            Partner
-                          </label>
-                          <select
-                            value={ext.partner || ''}
-                            onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
-                            className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                            disabled={loadingPartners || ext.isLocked}
-                          >
-                            <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                            {partners.map(p => (
-                              <option key={p.id} value={p.id}>{p.business_name}</option>
-                            ))}
-                            <option value="Other">Other (Custom Partner)</option>
-                          </select>
-                          {ext.partner === 'Other' && (
-                            <div className="mt-3 animate-fade-in">
-                              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                                Specify Partner Name
-                              </label>
-                              <input
-                                type="text"
-                                value={ext.customPartner || ''}
-                                onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
-                                disabled={ext.isLocked}
-                                placeholder="e.g. ABC Fire Refilling Co."
-                                className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                              />
-                            </div>
-                          )}
-                        </div>
                         <div>
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Expiry Date</label>
                           <input
@@ -2851,74 +3120,137 @@ const VisitForm = () => {
 
                   {ext.mode === 'Refill' && (
                     <>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
-                        <select
-                          value={ext.partner}
-                          onChange={(e) => handlePartnerSelect(index, e.target.value)}
-                          className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                          disabled={loadingPartners || ext.isLocked}
-                        >
-                          <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                          {partners.map(p => (
-                            <option key={p.id} value={p.id}>{p.business_name}</option>
+                      <div className="md:col-span-4 mb-4">
+                        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
+                          {['new', 'followup', 'license-renewal'].map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => handleExtinguisherChange(index, 'validation_mode', mode)}
+                              className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${(ext.validation_mode || 'new') === mode
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                            >
+                              {mode === 'new' ? 'New Refill' : mode === 'followup' ? 'Follow-up' : 'License Renewal'}
+                            </button>
                           ))}
-                          <option value="Other">Other (Custom Partner)</option>
-                        </select>
+                        </div>
+                      </div>
 
-                        {renderProductPicker(ext, index)}
+                      {(ext.validation_mode || 'new') === 'new' ? (
+                        <>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+                            <select
+                              value={ext.partner}
+                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
+                              className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                              disabled={loadingPartners || ext.isLocked}
+                            >
+                              <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
+                              {partners.map(p => (
+                                <option key={p.id} value={p.id}>{p.business_name}</option>
+                              ))}
+                              <option value="Other">Other (Custom Partner)</option>
+                            </select>
 
-                        {ext.partner === 'Other' && (
-                          <div className="mt-3 animate-fade-in">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                              Specify Partner Name
-                            </label>
+                            {renderProductPicker(ext, index)}
+
+                            {ext.partner === 'Other' && (
+                              <div className="mt-3 animate-fade-in">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                                  Specify Partner Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={ext.customPartner || ''}
+                                  onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+                                  disabled={ext.isLocked}
+                                  placeholder="e.g. ABC Fire Refilling Co."
+                                  className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
                             <input
-                              type="text"
-                              value={ext.customPartner || ''}
-                              onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+                              type="number"
+                              value={ext.quantity}
+                              min={1}
+                              onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value) || 1)}
                               disabled={ext.isLocked}
-                              placeholder="e.g. ABC Fire Refilling Co."
                               className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
                             />
                           </div>
-                        )}
-                      </div>
 
-                      <div className="">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
-                        <input
-                          type="number"
-                          value={ext.quantity}
-                          min={1}
-                          onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value) || 1)}
-                          disabled={ext.isLocked}
-                          className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                        />
-                      </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Expiry Date</label>
+                            <input
+                              type="date"
+                              value={ext.expiryDate}
+                              onChange={(e) => handleExtinguisherChange(index, 'expiryDate', e.target.value)}
+                              disabled={ext.isLocked}
+                              className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                            />
+                          </div>
 
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Expiry Date</label>
-                        <input
-                          type="date"
-                          value={ext.expiryDate}
-                          onChange={(e) => handleExtinguisherChange(index, 'expiryDate', e.target.value)}
-                          disabled={ext.isLocked}
-                          className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                        />
-                      </div>
+                          <QrScanFieldGroup
+                            slotKey={`r-${index}`}
+                            qrScannerSlot={qrScannerSlot}
+                            onQrScannerSlotChange={setQrScannerSlot}
+                            readerId={`visit-qr-r-${index}`}
+                            qrCodeValue={ext.qrCodeValue || ''}
+                            needsQrScan={needsQrScan}
+                            isQrValid={(ext.qrCodeValue || '') === EXPECTED_VISIT_QR}
+                            onDecoded={(text) => handleQrDecoded(text, index)}
+                            hint="Scan the site verification QR after entering the expiry date (optional)."
+                          />
+                        </>
+                      ) : ext.validation_mode === 'license-renewal' ? (
+                        renderLicenseRenewalFields(ext, index, 'lr')
+                      ) : (
+                        <>
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                              Partner <span className="normal-case text-slate-400">(optional)</span>
+                            </label>
+                            <select
+                              value={ext.partner || ''}
+                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
+                              className="input-field py-2 text-sm"
+                            >
+                              <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
+                              {partners.map(p => (
+                                <option key={p.id} value={p.id}>{p.business_name}</option>
+                              ))}
+                            </select>
+                          </div>
 
-                      <QrScanFieldGroup
-                        slotKey={`r-${index}`}
-                        qrScannerSlot={qrScannerSlot}
-                        onQrScannerSlotChange={setQrScannerSlot}
-                        readerId={`visit-qr-r-${index}`}
-                        qrCodeValue={ext.qrCodeValue || ''}
-                        needsQrScan={needsQrScan}
-                        isQrValid={(ext.qrCodeValue || '') === EXPECTED_VISIT_QR}
-                        onDecoded={(text) => handleQrDecoded(text, index)}
-                        hint="Scan the site verification QR after entering the expiry date (optional)."
-                      />
+                          <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
+                            <input
+                              type="number"
+                              value={ext.quantity}
+                              min={1}
+                              onChange={(e) => handleExtinguisherChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                              className="input-field py-2 text-sm"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Follow-up Date</label>
+                            <input
+                              type="date"
+                              required
+                              value={ext.validationFollowUpDate || ''}
+                              onChange={(e) => handleExtinguisherChange(index, 'validationFollowUpDate', e.target.value)}
+                              className="input-field py-3 text-sm"
+                            />
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 
@@ -2926,7 +3258,45 @@ const VisitForm = () => {
                     <>
                       <div className="col-span-4 space-y-6 animate-fade-in">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-end gap-4">
-                          {/* Fire Fighting System Category */}
+                          {/* Partner — chosen first, so System Category/Material can be limited to what's assigned to them */}
+                          <div>
+                            <label
+                              htmlFor={`partner-maint-${index}`}
+                              className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
+                            >
+                              Partner
+                            </label>
+                            <select
+                              id={`partner-maint-${index}`}
+                              value={ext.partner || ''}
+                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
+                              className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                              disabled={loadingPartners || ext.isLocked}
+                            >
+                              <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
+                              {partners.map(p => (
+                                <option key={p.id} value={p.id}>{p.business_name}</option>
+                              ))}
+                              <option value="Other">Other (Custom Partner)</option>
+                            </select>
+                            {ext.partner === 'Other' && (
+                              <div className="mt-3 animate-fade-in">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                                  Specify Partner Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={ext.customPartner || ''}
+                                  onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+                                  disabled={ext.isLocked}
+                                  placeholder="e.g. ABC Fire Refilling Co."
+                                  className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Fire Fighting System Category — limited to categories assigned to the selected Partner */}
                           <div>
                             <label
                               htmlFor={`ff-system-maint-${index}`}
@@ -2941,12 +3311,17 @@ const VisitForm = () => {
                               disabled={ext.isLocked}
                               className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                             >
-                              <option value="">Select Category...</option>
-                              {Object.keys(FIRE_FIGHTING_CATEGORIES).map(sys => (
+                              <option value="">
+                                {!ext.partner ? 'Select Partner first' : loadingPartnerProducts[ext.partner] ? 'Loading...' : 'Select Category...'}
+                              </option>
+                              {getPartnerAssignedCategories(ext.partner).map(sys => (
                                 <option key={sys} value={sys}>{sys}</option>
                               ))}
                               <option>Other</option>
                             </select>
+                            {ext.partner && ext.partner !== 'Other' && !loadingPartnerProducts[ext.partner] && getPartnerAssignedCategories(ext.partner).length === 0 && (
+                              <p className="text-xs text-amber-700 mt-1.5">No categories assigned to this Partner yet.</p>
+                            )}
                             {ext.firefightingSystem === 'Other' && (
                               <div className="mt-3 animate-fade-in">
                                 <label
@@ -2989,8 +3364,10 @@ const VisitForm = () => {
                             >
                               <option value="">Select Material...</option>
                               {ext.firefightingSystem &&
-                                FIRE_FIGHTING_CATEGORIES[ext.firefightingSystem]?.map(mat => (
-                                  <option key={mat} value={mat}>{mat}</option>
+                                getPartnerAssignedMaterials(ext.partner, ext.firefightingSystem).map(p => (
+                                  <option key={p.id} value={p.name}>
+                                    {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
+                                  </option>
                                 ))}
                               <option>Other</option>
                             </select>
@@ -3067,39 +3444,6 @@ const VisitForm = () => {
                           >
                             <Plus size={18} /> Add
                           </button>
-                        </div>
-                        {/* Partner (same as New Unit) */}
-                        <div>
-                          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                            Partner
-                          </label>
-                          <select
-                            value={ext.partner || ''}
-                            onChange={(e) => handleExtinguisherChange(index, 'partner', e.target.value)}
-                            className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                            disabled={loadingPartners || ext.isLocked}
-                          >
-                            <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                            {partners.map(p => (
-                              <option key={p.id} value={p.id}>{p.business_name}</option>
-                            ))}
-                            <option value="Other">Other (Custom Partner)</option>
-                          </select>
-                          {ext.partner === 'Other' && (
-                            <div className="mt-3 animate-fade-in">
-                              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                                Specify Partner Name
-                              </label>
-                              <input
-                                type="text"
-                                value={ext.customPartner || ''}
-                                onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
-                                disabled={ext.isLocked}
-                                placeholder="e.g. ABC Fire Refilling Co."
-                                className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                              />
-                            </div>
-                          )}
                         </div>
                         <div>
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Expiry Date</label>
@@ -3595,3 +3939,14 @@ const Input = ({ label, name, value, onChange, placeholder, required = false, ty
 );
 
 export default VisitForm;
+
+
+// license renewal ke time partner ko optional krna hai
+
+// License Expiry Date ko remove krni hai q k renewal date hi sahi hai 
+
+// isme ek issue ahraha hai mena isme renewal ki inquiry banai thi isne followup ki inquiry banai hai isko license renewal ki inquiry banani chahiya thi 
+
+// inquiry creeate hone ke bad partner ko notify krna chahiya that this customer required the renewal agr in case partner kehta hai i required some information and the so the partner to partner customer se mang sakta hai chat ma jis tarah se maintenance aur new unit ma chat thi aur phr inquiry ma partner ke bad button hoga accept aur reject ka renew krne se pehly ek aur cheez hai once it is accepted all documentation sath de ur phr partne ne quotation issue krni hai customer ko yeh flow is tarah se hoga jis tarah se mena maintenance ma quotation ka flow tha isme bhi isi tarah se hoga. 
+
+// partner dashboard pr new page create krna hai jisme inquiries ani chahiya Validation, refill, new unit, maintenance acha Validation ke tab ma New Validation, follow-up, license renewal ayega aur isme yeh hona cahiya k partner kaya offer kr raha hai for example agr partner ne Refill ke inquiry off krdi to phr inquiry create krne ke time jb partner select hoga to refill ki inquiry nahi ban sakti q k partner ne refill ki inquiry off krdi hai yeh ek tarah ka manage service ka page hoga 
