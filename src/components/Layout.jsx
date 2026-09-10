@@ -127,6 +127,7 @@ const Layout = ({ children }) => {
             return [
                 { icon: LayoutDashboard, label: 'Partner Dashboard', to: '/partner/dashboard' },
                 { icon: Package, label: 'Manage Products', to: '/partner/products' },
+                { icon: Wrench, label: 'Manage Services', to: '/partner/services' },
                 { icon: Tag, label: 'Stickers usage', to: '/partner/stickers' },
                 { icon: Bot, label: 'AI Agent', to: '/partner/ai-agent' },
                 { icon: MessageSquare, label: 'Complaint', to: '/partner/complaint' },

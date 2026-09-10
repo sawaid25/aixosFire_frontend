@@ -145,6 +145,13 @@ const QueryDetail = () => {
             minute: '2-digit'
         }) : 'N/A';
 
+    const formatDateOnly = (date) =>
+        date ? new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        }) : 'N/A';
+
     const handleConfirmDelivery = async () => {
         setActionLoading(true);
         try {
@@ -347,6 +354,37 @@ const QueryDetail = () => {
                                         <DetailItem icon={<FileText />} label="System" value={item.system} />
                                     </div>
 
+                                    {item.validation_mode === 'license-renewal' && (
+                                        <div className="p-5 bg-blue-50/50 rounded-2xl border-l-4 border-blue-300 space-y-5">
+                                            <p className="text-xs uppercase font-bold text-blue-500 flex items-center gap-2">
+                                                <ShieldCheck size={14} /> License Renewal
+                                            </p>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                                <DetailItem icon={<FileText />} label="License Number" value={item.license_number} />
+                                                <DetailItem icon={<Building2 />} label="Issuing Authority" value={item.license_authority} />
+                                                <DetailItem icon={<Calendar />} label="Renewal Date" value={formatDateOnly(item.license_renewal_date)} />
+                                            </div>
+                                            {item.license_notes && (
+                                                <div>
+                                                    <p className="text-xs uppercase font-bold text-slate-400 mb-1">Notes</p>
+                                                    <p className="text-slate-600 text-sm">{item.license_notes}</p>
+                                                </div>
+                                            )}
+                                            {item.license_document_url && (
+                                                <div>
+                                                    <p className="text-xs uppercase font-bold text-slate-400 mb-2">License Document</p>
+                                                    <a href={item.license_document_url} target="_blank" rel="noopener noreferrer">
+                                                        <img
+                                                            src={item.license_document_url}
+                                                            alt="License document"
+                                                            className="h-24 w-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity"
+                                                        />
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {item.maintenance_notes && (
                                         <div className="p-5 bg-slate-50 rounded-2xl border-l-4 border-slate-300">
                                             <p className="text-xs uppercase font-bold text-slate-400 mb-2">Maintenance Notes</p>
@@ -405,6 +443,34 @@ const QueryDetail = () => {
                                         <DetailItem icon={<Activity />} label="Condition" value={item.condition} />
                                         <DetailItem icon={<ShieldCheck />} label="Catalog" value={item.catalog_no} />
                                     </div>
+
+                                    {item.validation_mode === 'license-renewal' && (
+                                        <div className="pt-4 border-t space-y-4">
+                                            <p className="text-xs uppercase font-bold text-blue-500 flex items-center gap-2">
+                                                <ShieldCheck size={14} /> License Renewal
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-y-4 text-sm">
+                                                <DetailItem icon={<FileText />} label="License No" value={item.license_number} />
+                                                <DetailItem icon={<Building2 />} label="Authority" value={item.license_authority} />
+                                                <DetailItem icon={<Calendar />} label="Renewal Date" value={formatDateOnly(item.license_renewal_date)} />
+                                            </div>
+                                            {item.license_notes && (
+                                                <div>
+                                                    <p className="text-xs font-bold text-slate-400 mb-1">NOTES</p>
+                                                    <p className="text-sm text-slate-600">{item.license_notes}</p>
+                                                </div>
+                                            )}
+                                            {item.license_document_url && (
+                                                <a href={item.license_document_url} target="_blank" rel="noopener noreferrer" className="inline-block">
+                                                    <img
+                                                        src={item.license_document_url}
+                                                        alt="License document"
+                                                        className="h-20 w-20 object-cover rounded-xl border border-slate-200"
+                                                    />
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {item.maintenance_notes && (
                                         <div className="pt-4 border-t">

@@ -30,6 +30,27 @@ export const getPartnerStats = async () => {
     }
 };
 
+export const getMyServiceAvailability = async () => {
+    try {
+        const response = await client.get('/partners/service-availability');
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error fetching service availability:', error);
+        throw error;
+    }
+};
+
+/** @param {{service_type: string, service_subtype?: string, is_enabled: boolean}[]} updates */
+export const updateMyServiceAvailability = async (updates) => {
+    try {
+        const response = await client.put('/partners/service-availability', { updates });
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error updating service availability:', error);
+        throw error;
+    }
+};
+
 export const getInquiries = async (params = {}) => {
     try {
         const response = await client.get('/inquiries', { params });
@@ -50,9 +71,9 @@ export const getInquiryById = async (id) => {
     }
 };
 
-export const updateInquiryStatus = async (id, status) => {
+export const updateInquiryStatus = async (id, status, extra = {}) => {
     try {
-        const response = await client.patch(`/inquiries/${id}`, { status });
+        const response = await client.patch(`/inquiries/${id}`, { status, ...extra });
         return extractApiData(response, null);
     } catch (error) {
         console.error('Error updating inquiry status:', error);

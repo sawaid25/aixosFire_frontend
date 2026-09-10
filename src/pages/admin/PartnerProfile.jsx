@@ -16,6 +16,24 @@ import StatCard from '../../components/admin/StatCard';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#3b82f6'];
 
+// Same 6 services the Partner's own "Manage Services" page controls — read-only here.
+const SERVICE_CHECKLIST = [
+    { type: 'Validation', subtype: 'new', label: 'New Validation' },
+    { type: 'Validation', subtype: 'followup', label: 'Follow-up' },
+    { type: 'Validation', subtype: 'license-renewal', label: 'License Renewal' },
+    { type: 'Refill', subtype: 'new', label: 'New Refill' },
+    { type: 'Refill', subtype: 'followup', label: 'Refill Follow-up' },
+    { type: 'Refill', subtype: 'license-renewal', label: 'Refill License Renewal' },
+    { type: 'New Unit', subtype: 'default', label: 'New Unit' },
+    { type: 'Maintenance', subtype: 'default', label: 'Maintenance' },
+];
+
+// A missing row means enabled — same default the Agent form and the DB trigger use.
+const isServiceEnabled = (rows, type, subtype) => {
+    const row = rows.find((r) => r.service_type === type && r.service_subtype === subtype);
+    return row ? row.is_enabled : true;
+};
+
 const getBadgeClass = (s) => {
     const v = (s||'').toLowerCase();
     if (['completed','accepted','closed'].includes(v)) return 'bg-green-100 text-green-700';
@@ -29,6 +47,7 @@ const PartnerProfile = () => {
     const [partner, setPartner] = useState(null);
     const [inquiries, setInquiries] = useState([]);
     const [stickers, setStickers] = useState([]);
+    const [serviceAvailability, setServiceAvailability] = useState([]);
     const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
@@ -39,6 +58,7 @@ const PartnerProfile = () => {
                     { data: pData, error: pErr },
                     { data: iData },
                     { data: sData },
+                    { data: avData },
                 ] = await Promise.all([
                     supabase.from('partners').select('*').eq('id', id).maybeSingle(),
                     supabase.from('inquiries')
@@ -49,11 +69,15 @@ const PartnerProfile = () => {
                         .select('id,quantity,used_for,created_at,inquiries(inquiry_no,customers(business_name))')
                         .eq('partner_id', id)
                         .order('created_at', { ascending: false }),
+                    supabase.from('partner_service_availability')
+                        .select('service_type,service_subtype,is_enabled')
+                        .eq('partner_id', id),
                 ]);
                 if (pErr) console.error('Failed to load partner:', pErr);
                 setPartner(pData);
                 setInquiries(iData || []);
                 setStickers(sData || []);
+                setServiceAvailability(avData || []);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -158,6 +182,27 @@ const PartnerProfile = () => {
                             <span className="flex items-center gap-1.5"><Tag size={14}/>{metrics.stickersRemaining} stickers remaining</span>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Services Offered — read-only mirror of the partner's own Manage Services page */}
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
+                <h3 className="text-sm font-bold text-slate-900 mb-4">Services Offered</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {SERVICE_CHECKLIST.map((svc) => {
+                        const enabled = isServiceEnabled(serviceAvailability, svc.type, svc.subtype);
+                        return (
+                            <div
+                                key={`${svc.type}-${svc.subtype}`}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${
+                                    enabled ? 'bg-green-50 text-green-700' : 'bg-slate-50 text-slate-400'
+                                }`}
+                            >
+                                {enabled ? <CheckCircle size={14} className="shrink-0"/> : <XCircle size={14} className="shrink-0"/>}
+                                <span className="truncate">{svc.label}</span>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 

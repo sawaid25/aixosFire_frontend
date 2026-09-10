@@ -12,11 +12,14 @@ import { fetchServicePricing } from '../../api/partnerRefill';
 import PartnerInspectionReportModal from './components/PartnerInspectionReportModal';
 import ValidationInquiryDetail from './components/ValidationInquiryDetail';
 import RefillInquiryDetail from './components/RefillInquiryDetail';
+import RenewalInquiryDetail from './components/RenewalInquiryDetail';
 import { buildValidationInquiryViewModel } from './utils/validationInquiryViewModel';
 import { buildRefillInquiryViewModel } from './utils/refillInquiryViewModel';
+import { buildRenewalInquiryViewModel, isRenewalOnlyInquiry } from './utils/renewalInquiryViewModel';
 import DeliveryScheduleModal from './components/DeliveryScheduleModal';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../../supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 const pdfVfs = pdfFonts?.pdfMake?.vfs || pdfFonts?.vfs;
 if (pdfVfs && !pdfMake.vfs) {
@@ -63,6 +66,7 @@ const InquiryCard = ({ item, inquiryId }) => (
 
 const InquiryItemsList = () => {
     const { id } = useParams();
+    const { user } = useAuth();
     const [inquiry, setInquiry] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -199,11 +203,38 @@ const InquiryItemsList = () => {
     // Validation uses the plain status PATCH (backend-guarded transition map),
     // not the Maintenance/Refill acceptInquiry endpoint — that endpoint branches
     // on delivery_mode/pickup_date and doesn't apply to Validation's lifecycle.
-    const handleValidationStatusUpdate = async (newStatus) => {
+    // `extra` lets Renewal pass { rejection_reason } alongside the status.
+    const handleValidationStatusUpdate = async (newStatus, extra = {}) => {
         setActionLoading(true);
         try {
-            await updateInquiryStatus(id, newStatus);
+            await updateInquiryStatus(id, newStatus, extra);
             toast.success(`Inquiry ${newStatus.replace('_', ' ')} successfully`);
+
+            // Renewal-specific: notify the customer (and agent, if known) that the
+            // partner accepted/rejected — nothing else does this for accept/reject
+            // today, so it's added here rather than in the shared backend path.
+            if (isRenewalOnlyInquiry(inquiry) && (newStatus === 'accepted' || newStatus === 'rejected')) {
+                const recipients = [inquiry.customer_id, inquiry.agent_id].filter(Boolean);
+                const title = newStatus === 'accepted' ? 'Renewal accepted' : 'Renewal rejected';
+                const message = newStatus === 'accepted'
+                    ? 'Your renewal request has been accepted by the partner.'
+                    : `Your renewal request was rejected.${extra.rejection_reason ? ` Reason: ${extra.rejection_reason}` : ''}`;
+                await Promise.all(recipients.map((recipientId) =>
+                    supabase.from('notifications').insert([{
+                        sender_id: user?.id ? String(user.id) : null,
+                        sender_role: 'Partner',
+                        recipient_id: String(recipientId),
+                        recipient_role: recipientId === inquiry.customer_id ? 'Customer' : 'Agent',
+                        message,
+                        inquiry_id: id,
+                        type: `renewal_${newStatus}`,
+                        title,
+                    }]).then(({ error: notifyErr }) => {
+                        if (notifyErr) console.error('[InquiryItemsList] renewal notification insert error:', notifyErr);
+                    })
+                ));
+            }
+
             await fetchInquiry();
         } catch (err) {
             console.error('[InquiryItemsList] handleValidationStatusUpdate error:', err);
@@ -245,6 +276,16 @@ const InquiryItemsList = () => {
         if (!inquiry || !isRefill) return null;
         return buildRefillInquiryViewModel(inquiry, servicePricing);
     }, [inquiry, isRefill, servicePricing]);
+
+    // A Renewal inquiry's `type` is still Validation or Refill — this only fires when
+    // (isValidation || isRefill) is also true, so it must be checked BEFORE those
+    // branches below to take priority over the generic Validation/Refill detail views.
+    const isRenewalOnly = inquiry ? isRenewalOnlyInquiry(inquiry) : false;
+
+    const renewalViewModel = useMemo(() => {
+        if (!inquiry || !isRenewalOnly) return null;
+        return buildRenewalInquiryViewModel(inquiry);
+    }, [inquiry, isRenewalOnly]);
 
     const formatVal = (value) => {
         if (value === null || value === undefined || value === '') return '—';
@@ -398,7 +439,9 @@ const InquiryItemsList = () => {
                         <ArrowLeft size={16} /> Back to Inquiries
                     </Link>
                     <h1 className="text-4xl md:text-5xl font-display font-black text-slate-900 tracking-tighter uppercase italic">
-                        {isValidation ? (
+                        {isRenewalOnly ? (
+                            <>Renewal <span className="text-primary-500">Inquiry.</span></>
+                        ) : isValidation ? (
                             <>Validation <span className="text-primary-500">Inquiry.</span></>
                         ) : isRefill ? (
                             <>Refill <span className="text-primary-500">Inquiry.</span></>
@@ -419,7 +462,7 @@ const InquiryItemsList = () => {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    {canGenerateServiceReport && (
+                    {canGenerateServiceReport && !isRenewalOnly && (
                         <button
                             type="button"
                             onClick={generateServiceReport}
@@ -429,8 +472,8 @@ const InquiryItemsList = () => {
                             Generate Service Report
                         </button>
                     )}
-                    {/* Delivery Status Indicator */}
-                    {isRefill && inquiry.delivery_mode === 'partner' && (
+                    {/* Delivery Status Indicator — not applicable to Renewal (no pickup/delivery) */}
+                    {isRefill && !isRenewalOnly && inquiry.delivery_mode === 'partner' && (
                         <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm ${
                             inquiry.delivery_status === 'agent_confirmed' 
                                 || inquiry.delivery_status === 'confirmed'
@@ -448,9 +491,10 @@ const InquiryItemsList = () => {
                         </div>
                     )}
 
-                    {inquiry.status?.toLowerCase() === 'pending' && (
+                    {inquiry.status?.toLowerCase() === 'pending' && !isRenewalOnly && (
                         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                            {/* Special Accept Button for Refill (Step 3) */}
+                            {/* Special Accept Button for Refill (Step 3) — Renewal has its own
+                                Accept/Reject inside RenewalInquiryDetail below, not this cluster. */}
                             {isRefill && (inquiry.delivery_status === 'agent_confirmed' || inquiry.delivery_status === 'confirmed') && (
                                 <button
                                     type="button"
@@ -497,7 +541,8 @@ const InquiryItemsList = () => {
                         </div>
                     )}
 
-                    {(inquiry.status?.toLowerCase() === 'pending' || inquiry.status?.toLowerCase() === 'accepted') &&
+                    {!isRenewalOnly &&
+                        (inquiry.status?.toLowerCase() === 'pending' || inquiry.status?.toLowerCase() === 'accepted') &&
                         (inquiry.inquiry_type?.toLowerCase() === 'maintenance' ||
                             inquiry.inquiry_type?.toLowerCase() === 'validation') && (
                             <button
@@ -512,7 +557,15 @@ const InquiryItemsList = () => {
             </div>
 
             {/* Conditional Detail Views */}
-            {isValidation && validationViewModel ? (
+            {isRenewalOnly && renewalViewModel ? (
+                <RenewalInquiryDetail
+                    viewModel={renewalViewModel}
+                    actionLoading={actionLoading}
+                    onAccept={() => handleValidationStatusUpdate('accepted')}
+                    onReject={(reason) => handleValidationStatusUpdate('rejected', { rejection_reason: reason })}
+                    onQuotationCreated={fetchInquiry}
+                />
+            ) : isValidation && validationViewModel ? (
                 <ValidationInquiryDetail
                     viewModel={validationViewModel}
                     actionLoading={actionLoading}

@@ -67,6 +67,12 @@ const InquiryChatBox = ({
         if (!user?.id || !recipientId || !inquiryId) return;
         fetchMessages(true);
 
+        // Realtime is the fast path, but the `messages` table's realtime/RLS config
+        // can't be relied on (the other party's replies were only landing in the
+        // notification bell, not here). Poll as a safety net — same approach ChatModal
+        // already uses — so incoming messages show up even when the socket is silent.
+        const poll = setInterval(() => fetchMessages(false), 4000);
+
         const channel = supabase
             .channel(`inquiry_messages_${inquiryId}_${recipientId}`)
             .on('postgres_changes', { event: 'INSERT', table: 'messages', filter: `inquiry_id=eq.${inquiryId}` },
@@ -79,7 +85,10 @@ const InquiryChatBox = ({
             )
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => {
+            clearInterval(poll);
+            supabase.removeChannel(channel);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, recipientId, inquiryId]);
 

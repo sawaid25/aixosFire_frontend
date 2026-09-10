@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
@@ -150,6 +150,9 @@ const VisitForm = () => {
   const [unitVoiceWarnings, setUnitVoiceWarnings] = useState({});
   const [partners, setPartners] = useState([]);
   const [loadingPartners, setLoadingPartners] = useState(false);
+  // Rows only exist for services a partner has explicitly toggled — a missing
+  // row means "enabled" (see supabase/migrations/20260908110000_partner_service_availability.sql).
+  const [partnerAvailability, setPartnerAvailability] = useState([]);
   // Per-partner assigned-product cache, keyed by partner id — fetched once per
   // partner the agent selects, not on every render.
   const [partnerProductsCache, setPartnerProductsCache] = useState({});
@@ -178,7 +181,47 @@ const VisitForm = () => {
       }
     };
     fetchPartners();
+
+    // Small table (a handful of rows per partner) — fetched once in full rather
+    // than lazily per partner, so the dropdown can be filtered before the agent
+    // even opens it (unlike partner_products, which is only needed after a
+    // partner is already picked).
+    const fetchPartnerAvailability = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('partner_service_availability')
+          .select('partner_id, service_type, service_subtype, is_enabled');
+        if (error) throw error;
+        setPartnerAvailability(data || []);
+      } catch (err) {
+        console.error('Error fetching partner service availability:', err);
+      }
+    };
+    fetchPartnerAvailability();
   }, []);
+
+  /**
+   * A partner is eligible for (mode, validationMode) unless an explicit row
+   * says is_enabled = false — a missing row means enabled. `mode` is one of
+   * the ext.mode values ('Validation'/'Refill'/'New Unit'/'Maintenance');
+   * `validationMode` only matters for Validation/Refill and defaults to 'new'.
+   */
+  const isPartnerEligible = useCallback((partnerId, mode, validationMode) => {
+    if (!partnerId) return true;
+    const subtype = ['Validation', 'Refill'].includes(mode) ? (validationMode || 'new') : 'default';
+    const disabled = partnerAvailability.some((row) =>
+      row.partner_id === partnerId &&
+      row.service_type === mode &&
+      row.service_subtype === subtype &&
+      row.is_enabled === false
+    );
+    return !disabled;
+  }, [partnerAvailability]);
+
+  /** Partners eligible for a given block's current mode/submode — what its <select> should list. */
+  const getEligiblePartners = useCallback((mode, validationMode) =>
+    partners.filter((p) => isPartnerEligible(p.id, mode, validationMode)),
+  [partners, isPartnerEligible]);
 
   const fetchPartnerProducts = async (partnerId) => {
     if (!partnerId || partnerId === 'Other' || partnerProductsCache[partnerId]) return;
@@ -303,7 +346,7 @@ const VisitForm = () => {
           className="input-field py-2 text-sm"
         >
           <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
-          {partners.map(p => (
+          {getEligiblePartners(ext.mode, 'license-renewal').map(p => (
             <option key={p.id} value={p.id}>{p.business_name}</option>
           ))}
           <option value="Other">Other (Custom Partner)</option>
@@ -919,6 +962,10 @@ const VisitForm = () => {
 
         // Mode change should ALWAYS be allowed and should unlock/reset validation
         if (field === 'mode') {
+          // Mode change resets validation_mode to 'new' (below) — if the
+          // currently-selected partner doesn't offer that combination, clear
+          // it rather than silently submit an invalid partner+service pair.
+          const stillEligible = isPartnerEligible(item.partner, value, 'new');
           return {
             ...item,
             mode: value,
@@ -926,6 +973,8 @@ const VisitForm = () => {
             hasChanges: false,
             price: 180,
             validation_mode: 'new',
+            partner: stillEligible ? item.partner : '',
+            customPartner: stillEligible ? item.customPartner : '',
             licenseNumber: '',
             licenseAuthority: '',
             licenseRenewalDate: '',
@@ -948,7 +997,18 @@ const VisitForm = () => {
           const cleared = value !== 'license-renewal'
             ? { licenseNumber: '', licenseAuthority: '', licenseRenewalDate: '', licenseNotes: '', licensePhoto: null }
             : {};
-          return { ...item, validation_mode: value, isLocked: false, hasChanges: false, ...cleared };
+          // Same reasoning as the mode-change branch above — a partner eligible for
+          // the old sub-mode may not be eligible for the new one.
+          const stillEligible = isPartnerEligible(item.partner, item.mode, value);
+          return {
+            ...item,
+            validation_mode: value,
+            isLocked: false,
+            hasChanges: false,
+            partner: stillEligible ? item.partner : '',
+            customPartner: stillEligible ? item.customPartner : '',
+            ...cleared,
+          };
         }
 
         // Other fields blocked if locked
@@ -2726,7 +2786,7 @@ const VisitForm = () => {
                               required
                             >
                               <option value="">{loadingPartners ? 'Loading...' : 'Select Partner'}</option>
-                              {partners.map(p => (
+                              {getEligiblePartners(ext.mode, 'new').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
                             </select>
@@ -2795,7 +2855,7 @@ const VisitForm = () => {
                               className="input-field py-2 text-sm"
                             >
                               <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
-                              {partners.map(p => (
+                              {getEligiblePartners(ext.mode, 'followup').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
                             </select>
@@ -2838,7 +2898,7 @@ const VisitForm = () => {
                             disabled={loadingPartners || ext.isLocked}
                           >
                             <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                            {partners.map(p => (
+                            {getEligiblePartners(ext.mode, null).map(p => (
                               <option key={p.id} value={p.id}>{p.business_name}</option>
                             ))}
                             <option value="Other">Other (Custom Partner)</option>
@@ -3148,7 +3208,7 @@ const VisitForm = () => {
                               disabled={loadingPartners || ext.isLocked}
                             >
                               <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                              {partners.map(p => (
+                              {getEligiblePartners(ext.mode, 'new').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
                               <option value="Other">Other (Custom Partner)</option>
@@ -3222,7 +3282,7 @@ const VisitForm = () => {
                               className="input-field py-2 text-sm"
                             >
                               <option value="">{loadingPartners ? 'Loading...' : 'No Partner'}</option>
-                              {partners.map(p => (
+                              {getEligiblePartners(ext.mode, 'followup').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
                             </select>
@@ -3274,7 +3334,7 @@ const VisitForm = () => {
                               disabled={loadingPartners || ext.isLocked}
                             >
                               <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                              {partners.map(p => (
+                              {getEligiblePartners(ext.mode, null).map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
                               <option value="Other">Other (Custom Partner)</option>

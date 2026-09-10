@@ -64,6 +64,7 @@ import PartnerComplaintPage from './pages/partner/ComplaintPage';
 import ManageProducts from './pages/partner/ManageProducts';
 import PartnerCategoryProducts from './pages/partner/PartnerCategoryProducts';
 import PartnerProductDetail from './pages/partner/PartnerProductDetail';
+import ManageServices from './pages/partner/ManageServices';
 
 
 
@@ -172,6 +173,7 @@ function App() {
                   <Route path="products" element={<ManageProducts />} />
                   <Route path="products/:categoryId" element={<PartnerCategoryProducts />} />
                   <Route path="products/:categoryId/:productId" element={<PartnerProductDetail />} />
+                  <Route path="services" element={<ManageServices />} />
                   <Route path="stickers" element={<StickersUsagePage />} />
                   <Route path="ai-agent" element={<AiAgentPage />} />
                   <Route path="complaint" element={<PartnerComplaintPage />} />

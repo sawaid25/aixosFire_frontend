@@ -140,7 +140,7 @@ const CustomerDashboard = () => {
                     }),
                     supabase
                         .from('quotations')
-                        .select('*')
+                        .select('*, inquiries(type)')
                         .eq('customer_id', user.id)
                         .order('created_at', { ascending: false })
                 ]);
@@ -159,7 +159,14 @@ const CustomerDashboard = () => {
 
                 setInquiries(normalizeCustomerInquiries(inqList));
                 setQuotations(quoList);
-                setMaintenanceQuotations(maintQuoRes.data || []);
+                // This panel is specifically labeled "Maintenance Quotation" below — without
+                // this filter it duplicated every quotation regardless of type (Renewal's
+                // included, mislabeled as Maintenance).
+                setMaintenanceQuotations(
+                    (maintQuoRes.data || []).filter(
+                        (q) => String(q.inquiries?.type || '').trim().toLowerCase() === 'maintenance'
+                    )
+                );
 
                 if (import.meta.env.DEV) {
                     console.debug('[CustomerDashboard] loaded', {
@@ -363,7 +370,11 @@ const CustomerDashboard = () => {
                                                 <p className="text-xs text-slate-500 mt-1">
                                                     Created: {formatDateSafe(inq.created_at)} · Internal ref: {internalRef}
                                                 </p>
-                                                {(inq.scheduled_date || inq.approval_status) && (
+                                                {/* Only show the visit row when a visit is actually scheduled — `approval_status`
+                                                    alone defaults to 'pending' on every inquiry (a Maintenance-only concept),
+                                                    so gating on it showed a meaningless "Visit: Not set · PENDING" on
+                                                    Validation/Refill/Renewal inquiries that never have a site visit. */}
+                                                {inq.scheduled_date && (
                                                     <div className="mt-2 text-xs flex flex-col items-start gap-2">
                                                         <div className="flex items-center gap-2">
                                                             <Calendar size={14} className="text-primary-500" />
@@ -561,24 +572,38 @@ const CustomerDashboard = () => {
                                             </p>
                                             <p className="text-xs text-slate-500 mt-1">
                                                 Inquiry: {q.inquiry_no || q.inquiry_id || '—'} · Amount:{' '}
-                                                {q.amount != null ? `SAR ${Number(q.amount).toLocaleString()}` : '—'}
+                                                {(q.estimated_cost ?? q.amount) != null
+                                                    ? `SAR ${Number(q.estimated_cost ?? q.amount).toLocaleString()}`
+                                                    : '—'}
                                             </p>
                                             <p className="text-xs text-slate-400 mt-1 capitalize">Status: {q.status || '—'}</p>
                                         </div>
-                                        {pending && (
-                                            <button
-                                                type="button"
-                                                disabled={quotationActionId === q.id}
-                                                onClick={() => handleApproveQuote(q)}
-                                                className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50"
-                                            >
-                                                {quotationActionId === q.id ? (
-                                                    <Loader2 className="animate-spin inline" size={16} />
-                                                ) : (
-                                                    'Approve'
-                                                )}
-                                            </button>
-                                        )}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {q.pdf_url && (
+                                                <a
+                                                    href={q.pdf_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50"
+                                                >
+                                                    View PDF
+                                                </a>
+                                            )}
+                                            {pending && (
+                                                <button
+                                                    type="button"
+                                                    disabled={quotationActionId === q.id}
+                                                    onClick={() => handleApproveQuote(q)}
+                                                    className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50"
+                                                >
+                                                    {quotationActionId === q.id ? (
+                                                        <Loader2 className="animate-spin inline" size={16} />
+                                                    ) : (
+                                                        'Approve'
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}

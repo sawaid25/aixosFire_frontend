@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { Search, MapPin, Phone, ArrowRight, User, Plus, RefreshCw, Calendar, History } from 'lucide-react';
+import { Search, MapPin, Phone, ArrowRight, User, Plus, RefreshCw, Calendar, History, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageLoader from "../../components/PageLoader";
 
@@ -101,20 +101,27 @@ const Customers = () => {
                     }
                 });
 
-                // Mark customers who have a pending follow-up validation item
+                // Mark customers who have a pending follow-up validation item, or a
+                // license renewal on file
                 const customerIds = uniqueCustomers.map(c => c.id);
                 if (customerIds.length > 0) {
-                    const { data: followUps, error: followUpErr } = await supabase
+                    const { data: subModeItems, error: subModeErr } = await supabase
                         .from('inquiry_items')
-                        .select('customer_id')
+                        .select('customer_id, validation_mode')
                         .in('customer_id', customerIds)
-                        .eq('validation_mode', 'followup');
+                        .in('validation_mode', ['followup', 'license-renewal']);
 
-                    if (followUpErr) throw followUpErr;
+                    if (subModeErr) throw subModeErr;
 
-                    const followUpIds = new Set((followUps || []).map(f => f.customer_id));
+                    const followUpIds = new Set();
+                    const licenseRenewalIds = new Set();
+                    (subModeItems || []).forEach(it => {
+                        if (it.validation_mode === 'followup') followUpIds.add(it.customer_id);
+                        if (it.validation_mode === 'license-renewal') licenseRenewalIds.add(it.customer_id);
+                    });
                     uniqueCustomers.forEach(c => {
                         c.hasFollowUp = followUpIds.has(c.id);
+                        c.hasLicenseRenewal = licenseRenewalIds.has(c.id);
                     });
                 }
 
@@ -249,6 +256,14 @@ const Customers = () => {
                                                                     <RefreshCw size={10} /> Follow-up
                                                                 </span>
                                                             )}
+                                                            {customer.hasLicenseRenewal && (
+                                                                <span
+                                                                    title="License renewal on file"
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700"
+                                                                >
+                                                                    <ShieldCheck size={10} /> License Renewal
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <p className="text-xs text-slate-500 mt-0.5">{customer.owner_name || 'N/A'}</p>
                                                         <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
@@ -318,6 +333,14 @@ const Customers = () => {
                                                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 shrink-0"
                                                         >
                                                             <RefreshCw size={10} /> Follow-up
+                                                        </span>
+                                                    )}
+                                                    {customer.hasLicenseRenewal && (
+                                                        <span
+                                                            title="License renewal on file"
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0"
+                                                        >
+                                                            <ShieldCheck size={10} /> License Renewal
                                                         </span>
                                                     )}
                                                 </div>

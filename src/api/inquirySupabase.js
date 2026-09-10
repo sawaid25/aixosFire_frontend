@@ -73,6 +73,40 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     throw err;
   }
 
+  // Friendly first layer in front of the DB trigger (enforce_partner_service_availability,
+  // BEFORE INSERT ON inquiry_items) — that trigger is the tamper-proof enforcement; this
+  // just gives a clean error message before attempting any insert at all, since a raw
+  // Postgres RAISE EXCEPTION would otherwise surface as a wrapped generic DB error.
+  if (inquiryData?.partner_id) {
+    const combos = new Map();
+    itemsArr.forEach((it) => {
+      const subtype = ['Validation', 'Refill'].includes(inquiryData.type)
+        ? (it.validation_mode || 'new')
+        : 'default';
+      combos.set(`${inquiryData.type}::${subtype}`, subtype);
+    });
+
+    if (combos.size > 0) {
+      const { data: availabilityRows, error: availabilityErr } = await supabase
+        .from('partner_service_availability')
+        .select('service_type, service_subtype, is_enabled')
+        .eq('partner_id', inquiryData.partner_id)
+        .eq('service_type', inquiryData.type)
+        .eq('is_enabled', false);
+
+      if (availabilityErr) {
+        console.warn('[createInquiryViaSupabase] availability pre-check failed, deferring to DB trigger:', availabilityErr);
+      } else {
+        const disabledSubtype = (availabilityRows || []).find((row) => combos.has(`${row.service_type}::${row.service_subtype}`));
+        if (disabledSubtype) {
+          const err = new Error(`This Partner does not currently offer ${inquiryData.type} ${disabledSubtype.service_subtype} services.`);
+          err.status = 409;
+          throw err;
+        }
+      }
+    }
+  }
+
   const { data: existingInquiry, error: existingInquiryErr } = await supabase
     .from('inquiries')
     .select('id')
@@ -88,12 +122,21 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     throw new Error('Duplicate inquiry request detected');
   }
 
+  // A Renewal inquiry (every item is a license-renewal) has its own partner-side
+  // lifecycle: pending -> accepted -> quoted -> completed. It must NOT inherit the
+  // "Validation auto-completes at creation" shortcut below, or the partner can
+  // never Accept it and quotation creation is permanently blocked.
+  const isRenewalOnly = itemsArr.length > 0 && itemsArr.every((it) => it.validation_mode === 'license-renewal');
+
   const inquiryRow = {
     inquiry_no: inquiryData.inquiry_no,
     customer_id: inquiryData.customer_id,
     type: inquiryData.type,
     priority: inquiryData.priority || 'Medium',
-    status: inquiryData.status || ((inquiryData.type || '').toLowerCase() === 'validation' ? 'completed' : 'pending'),
+    status: inquiryData.status
+      || (isRenewalOnly
+        ? 'pending'
+        : ((inquiryData.type || '').toLowerCase() === 'validation' ? 'completed' : 'pending')),
   };
 
   const optionalInquiryKeys = [
@@ -204,8 +247,38 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     const { error: itemsErr } = await supabase.from('inquiry_items').insert(itemRows);
     if (itemsErr) {
       console.error('[createInquiryViaSupabase] inquiry_items insert', itemsErr);
+      // Clean up the orphaned inquiry row — previously missing here (unlike the
+      // sticker-failure paths below, which do this), and now more likely to be hit
+      // in normal use since enforce_partner_service_availability can legitimately
+      // reject an item insert.
+      await supabase.from('inquiries').delete().eq('id', inquiryId);
       throwReadableDbError(itemsErr, 'Could not save inquiry line items');
     }
+  }
+
+  // Renewal inquiries (every item validation_mode === 'license-renewal') notify the
+  // assigned partner right away — creation happens here (direct Supabase, not the
+  // Express backend), so this is the only place this notification can be inserted.
+  // (isRenewalOnly is computed once, up near inquiryRow.)
+  if (isRenewalOnly && inquiryData.partner_id) {
+    const { data: customerRow } = await supabase
+      .from('customers')
+      .select('business_name')
+      .eq('id', customerId)
+      .maybeSingle();
+    const customerName = customerRow?.business_name || 'A customer';
+
+    const { error: notifyErr } = await supabase.from('notifications').insert([{
+      sender_id: inquiryData.agent_id ? String(inquiryData.agent_id) : null,
+      sender_role: 'Agent',
+      recipient_id: String(inquiryData.partner_id),
+      recipient_role: 'Partner',
+      message: `Customer ${customerName} has requested a renewal. Please review the inquiry and respond.`,
+      inquiry_id: inquiryId,
+      type: 'renewal_assigned',
+      title: 'New Renewal Request',
+    }]);
+    if (notifyErr) console.error('[createInquiryViaSupabase] renewal notification insert error:', notifyErr);
   }
 
   if (shouldConsumeSticker) {

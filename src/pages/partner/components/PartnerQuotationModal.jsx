@@ -46,7 +46,11 @@ const PartnerQuotationModal = ({ isOpen, onClose, inquiryId, customerId, partner
             onClose();
         } catch (error) {
             console.error('Quotation submit error:', error);
-            toast.error(error.message || 'Failed to submit quotation');
+            // Surface the server's actual message (e.g. the 409 "Renewal must be
+            // accepted before a quotation can be created.") — axios's error.message
+            // is just "Request failed with status code 409".
+            const serverMsg = error.response?.data?.error || error.response?.data?.message;
+            toast.error(serverMsg || error.message || 'Failed to submit quotation');
         } finally {
             setLoading(false);
         }

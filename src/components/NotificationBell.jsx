@@ -9,6 +9,36 @@ import { invalidatePartnerProducts } from '../hooks/usePartnerProducts';
 
 const EXPIRY_DAYS = 10;
 
+const RENEWAL_TITLES = {
+    renewal_assigned: 'New Renewal Request',
+    renewal_accepted: 'Renewal accepted',
+    renewal_rejected: 'Renewal rejected',
+    renewal_completed: 'Renewal completed',
+};
+
+/**
+ * Turns a raw `notifications` row into the {title, type} pair the bell renders
+ * and routes clicks on. All three loaders below previously collapsed anything
+ * they didn't special-case (renewal_*, quotation, quotation_update included)
+ * down to a generic 'message' bucket — this keeps that fallback for anything
+ * still unrecognized, but surfaces the types this feature actually needs.
+ */
+const deriveNotificationDisplay = (n, fallbackTitle) => {
+    if (n.notification_type === 'partial_accept') {
+        return { title: 'Partial refill update', type: 'partial_accept' };
+    }
+    if (n.notification_type === 'product_assigned' || n.type === 'product_assigned') {
+        return { title: 'New Product Assigned', type: 'product_assigned' };
+    }
+    if (n.type && RENEWAL_TITLES[n.type]) {
+        return { title: n.title || RENEWAL_TITLES[n.type], type: n.type };
+    }
+    if (n.type === 'quotation' || n.type === 'quotation_update') {
+        return { title: n.title || (n.type === 'quotation' ? 'New Quotation' : 'Quotation Update'), type: n.type };
+    }
+    return { title: fallbackTitle, type: 'message' };
+};
+
 const NotificationBell = ({ onOpenChat }) => {
     const { user } = useAuth();
     const role = user?.role || localStorage.getItem('role');
@@ -96,16 +126,13 @@ const NotificationBell = ({ onOpenChat }) => {
             
             if (!error && dbNotifs) {
                 dbNotifs.forEach((n) => {
-                    const isPartial = n.notification_type === 'partial_accept';
+                    const fallbackTitle = n.sender_role === 'partner' ? 'Partner Update' : 'New System Alert';
+                    const { title, type } = deriveNotificationDisplay(n, fallbackTitle);
                     list.push({
                         id: `notif-${n.id}`,
-                        title: isPartial
-                            ? 'Partial refill update'
-                            : n.sender_role === 'partner'
-                              ? 'Partner Update'
-                              : 'New System Alert',
+                        title,
                         message: n.message,
-                        type: isPartial ? 'partial_accept' : 'message',
+                        type,
                         timestamp: n.created_at,
                         isRead: n.is_read,
                         relatedId: n.inquiry_id,
@@ -156,16 +183,13 @@ const NotificationBell = ({ onOpenChat }) => {
 
             if (!error && dbNotifs) {
                 dbNotifs.forEach((n) => {
-                    const isPartial = n.notification_type === 'partial_accept';
+                    const fallbackTitle = n.sender_role === 'partner' ? 'Partner update' : 'System alert';
+                    const { title, type } = deriveNotificationDisplay(n, fallbackTitle);
                     list.push({
                         id: `notif-${n.id}`,
-                        title: isPartial
-                            ? 'Partial refill update'
-                            : n.sender_role === 'partner'
-                              ? 'Partner update'
-                              : 'System alert',
+                        title,
                         message: n.message,
-                        type: isPartial ? 'partial_accept' : 'message',
+                        type,
                         timestamp: n.created_at,
                         isRead: n.is_read,
                         relatedId: n.inquiry_id,
@@ -212,14 +236,17 @@ const NotificationBell = ({ onOpenChat }) => {
 
             if (!error && dbNotifs) {
                 dbNotifs.forEach((n) => {
-                    const isProductAssigned = n.notification_type === 'product_assigned' || n.type === 'product_assigned';
+                    const { title, type } = deriveNotificationDisplay(n, 'System alert');
                     list.push({
                         id: `notif-${n.id}`,
-                        title: isProductAssigned ? 'New Product Assigned' : 'System alert',
+                        title,
                         message: n.message,
-                        type: isProductAssigned ? 'product_assigned' : 'message',
+                        type,
                         timestamp: n.created_at,
-                        isRead: n.is_read
+                        isRead: n.is_read,
+                        relatedId: n.inquiry_id,
+                        senderId: n.sender_id,
+                        senderRole: n.sender_role
                     });
                 });
             }
@@ -521,6 +548,18 @@ const NotificationBell = ({ onOpenChat }) => {
         if (notification.type === 'product_assigned') {
             invalidatePartnerProducts(); // pull the freshly-assigned product on landing
             navigate('/partner/products');
+            setIsOpen(false);
+            return;
+        }
+        if (typeof notification.type === 'string' && notification.type.startsWith('renewal_') && notification.relatedId) {
+            const role = (user?.role || '').toLowerCase();
+            if (role === 'partner') {
+                navigate(`/partner/inquiry/${notification.relatedId}`);
+            } else if (role === 'customer') {
+                navigate('/customer/dashboard');
+            }
+            // No dedicated agent-side inquiry detail page exists today — the bell
+            // still shows/marks the notification read, it just doesn't navigate.
             setIsOpen(false);
             return;
         }
