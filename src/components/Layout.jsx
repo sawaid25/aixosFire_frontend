@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog, Package } from 'lucide-react';
+import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog, Package, SlidersHorizontal } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useLocationTracker from '../hooks/useLocationTracker';
 import NotificationBell from './NotificationBell';
@@ -117,6 +117,7 @@ const Layout = ({ children }) => {
                 { icon: Handshake,       label: 'Partners',         to: '/admin/partners',    group: 'Management' },
                 { icon: Package,         label: 'Products',         to: '/admin/products',    group: 'Management' },
                 { icon: Users,           label: 'Customers',        to: '/admin/customers',   group: 'Management' },
+                { icon: SlidersHorizontal, label: 'Service Manage', to: '/admin/service-manage', group: 'Management' },
                 { icon: Bookmark,        label: 'Service Queue',    to: '/admin/services',    group: 'Operations' },
                 { icon: Wrench,          label: 'Operations',       to: '/admin/operations',  group: 'Operations' },
                 { icon: Map,             label: 'Global Map',       to: '/admin/map',         group: 'Operations' },

@@ -74,19 +74,39 @@ export async function createInquiryViaSupabase(inquiryData, items) {
   }
 
   // Friendly first layer in front of the DB trigger (enforce_partner_service_availability,
-  // BEFORE INSERT ON inquiry_items) — that trigger is the tamper-proof enforcement; this
-  // just gives a clean error message before attempting any insert at all, since a raw
-  // Postgres RAISE EXCEPTION would otherwise surface as a wrapped generic DB error.
-  if (inquiryData?.partner_id) {
-    const combos = new Map();
-    itemsArr.forEach((it) => {
-      const subtype = ['Validation', 'Refill'].includes(inquiryData.type)
-        ? (it.validation_mode || 'new')
-        : 'default';
-      combos.set(`${inquiryData.type}::${subtype}`, subtype);
-    });
+  // BEFORE INSERT ON inquiry_items) — that trigger is the tamper-proof enforcement (it also
+  // checks the Admin-level global switch first); this just gives a clean error message
+  // before attempting any insert at all, since a raw Postgres RAISE EXCEPTION would
+  // otherwise surface as a wrapped generic DB error.
+  const combos = new Map();
+  itemsArr.forEach((it) => {
+    const subtype = ['Validation', 'Refill'].includes(inquiryData.type)
+      ? (it.validation_mode || 'new')
+      : 'default';
+    combos.set(`${inquiryData.type}::${subtype}`, subtype);
+  });
 
-    if (combos.size > 0) {
+  if (combos.size > 0) {
+    // Admin global switch — checked regardless of whether a partner is assigned yet,
+    // same order as the DB trigger.
+    const { data: globalDisabledRows, error: globalAvailabilityErr } = await supabase
+      .from('service_availability')
+      .select('service_type, service_subtype, is_enabled')
+      .eq('service_type', inquiryData.type)
+      .eq('is_enabled', false);
+
+    if (globalAvailabilityErr) {
+      console.warn('[createInquiryViaSupabase] global availability pre-check failed, deferring to DB trigger:', globalAvailabilityErr);
+    } else {
+      const globallyDisabled = (globalDisabledRows || []).find((row) => combos.has(`${row.service_type}::${row.service_subtype}`));
+      if (globallyDisabled) {
+        const err = new Error(`${inquiryData.type} ${globallyDisabled.service_subtype} service is currently unavailable.`);
+        err.status = 409;
+        throw err;
+      }
+    }
+
+    if (inquiryData?.partner_id) {
       const { data: availabilityRows, error: availabilityErr } = await supabase
         .from('partner_service_availability')
         .select('service_type, service_subtype, is_enabled')

@@ -1,16 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, RefreshCw, Package, Wrench, CheckCircle2, Loader2, Lock } from 'lucide-react';
-import { toast } from 'react-hot-toast';
-import { getMyServiceAvailability, updateMyServiceAvailability } from '../../api/partners';
+import { ShieldCheck, RefreshCw, Package, Wrench, CheckCircle2, SlidersHorizontal, Loader2, Users } from 'lucide-react';
+import toast from 'react-hot-toast';
+import PageLoader from '../../components/PageLoader';
 import { supabase } from '../../supabaseClient';
+import { getGlobalServiceAvailability, updateGlobalServiceAvailability } from '../../api/admin';
 
+/**
+ * Admin-level master switch per (service_type, service_subtype) — ANDed with each
+ * Partner's own setting (src/pages/partner/ManageServices.jsx) wherever availability
+ * is checked. Deliberately mirrors that page's structure/behavior (same service list,
+ * same toggle-row UI, same immediate-save-with-toast flow, no confirmation dialog —
+ * this admin panel doesn't use those for enable/disable actions anywhere else, see
+ * Products.jsx's category/product toggle) since it's the same underlying concept at
+ * a different scope.
+ */
 const SERVICE_GROUPS = [
   {
     type: 'Validation',
     icon: ShieldCheck,
     title: 'Validation',
-    description: 'Configure which Validation services you provide.',
+    description: 'Control which Validation services are available system-wide.',
     items: [
       { subtype: 'new', label: 'New Validation', description: "Create a brand-new validation record for a customer's fire safety equipment." },
       { subtype: 'followup', label: 'Follow-up', description: 'Re-check equipment that was already validated on a previous visit.' },
@@ -21,7 +30,7 @@ const SERVICE_GROUPS = [
     type: 'Refill',
     icon: RefreshCw,
     title: 'Refill',
-    description: 'Configure which Refill services you provide.',
+    description: 'Control which Refill services are available system-wide.',
     items: [
       { subtype: 'new', label: 'New Refill', description: 'Refill fire extinguishers or cylinders for a customer.' },
       { subtype: 'followup', label: 'Follow-up', description: 'Follow up on a previous refill request.' },
@@ -32,7 +41,7 @@ const SERVICE_GROUPS = [
     type: 'New Unit',
     icon: Package,
     title: 'New Unit',
-    description: 'Configure your New Unit installation service.',
+    description: 'Control the New Unit installation service system-wide.',
     items: [
       { subtype: 'default', label: 'New Unit Services', description: 'Install new fire safety equipment for a customer.' },
     ],
@@ -41,7 +50,7 @@ const SERVICE_GROUPS = [
     type: 'Maintenance',
     icon: Wrench,
     title: 'Maintenance',
-    description: 'Configure your Maintenance service.',
+    description: 'Control the Maintenance service system-wide.',
     items: [
       { subtype: 'default', label: 'Maintenance Services', description: 'Perform maintenance and inspection visits on existing equipment.' },
     ],
@@ -67,70 +76,76 @@ const ToggleSwitch = ({ checked, onChange, disabled }) => (
   </button>
 );
 
-const ServiceRow = ({ label, description, enabled, saving, onToggle, globallyEnabled }) => (
+const ServiceRow = ({ label, description, enabled, saving, onToggle, offeringCount }) => (
   <div className="flex items-center justify-between gap-4 py-4 border-b border-slate-50 last:border-b-0">
     <div className="min-w-0">
       <div className="flex items-center gap-2 flex-wrap">
         <p className="font-bold text-slate-900 text-sm">{label}</p>
-        {!globallyEnabled ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-red-500">
-            <Lock size={11} /> Disabled by Admin
-          </span>
-        ) : enabled ? (
+        {enabled ? (
           <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-600">
-            <CheckCircle2 size={12} /> Active
+            <CheckCircle2 size={12} /> Enabled
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            <span className="w-2 h-2 rounded-full border border-slate-300" /> Not Offered
+          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-red-500">
+            <span className="w-2 h-2 rounded-full border border-red-400" /> Disabled
+          </span>
+        )}
+        {offeringCount != null && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+            <Users size={11} /> {offeringCount} partner{offeringCount === 1 ? '' : 's'} offering
           </span>
         )}
       </div>
-      <p className="text-xs text-slate-500 mt-0.5">
-        {globallyEnabled ? description : 'This service is currently turned off system-wide by an administrator.'}
-      </p>
+      <p className="text-xs text-slate-500 mt-0.5">{description}</p>
     </div>
     {saving ? (
       <Loader2 size={18} className="animate-spin text-slate-400 shrink-0" />
     ) : (
-      <ToggleSwitch checked={globallyEnabled && enabled} onChange={onToggle} disabled={saving || !globallyEnabled} />
+      <ToggleSwitch checked={enabled} onChange={onToggle} disabled={saving} />
     )}
   </div>
 );
 
-const ManageServices = () => {
+const ServiceManage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // Map of `${type}::${subtype}` -> boolean, only for combos with an explicit row.
-  // A missing key means enabled — same default used by the Agent form / DB trigger.
+  // Map of `${type}::${subtype}` -> boolean. All 6 combos are seeded by migration, so
+  // in practice every key is always present — the `true` fallback below is defensive.
   const [availability, setAvailability] = useState({});
-  // Admin-level global switch — read-only here (partners cannot write this table; RLS
-  // blocks it, see the migration). A missing key defaults to enabled, same as above.
-  const [globalAvailability, setGlobalAvailability] = useState({});
   const [savingKey, setSavingKey] = useState(null);
+  // "Partners offering" count per service: total active partners minus however many
+  // explicitly disabled that combo — a missing partner_service_availability row means
+  // "offering" (same default used everywhere else this table is read), so this is
+  // read-only informational context, not a write path.
+  const [totalPartners, setTotalPartners] = useState(0);
+  const [disabledCounts, setDisabledCounts] = useState({});
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [rows, globalRes] = await Promise.all([
-        getMyServiceAvailability(),
-        supabase.from('service_availability').select('service_type, service_subtype, is_enabled'),
+      const [rows, partnerCountRes, disabledRes] = await Promise.all([
+        getGlobalServiceAvailability(),
+        supabase.from('partners').select('id', { count: 'exact', head: true }).eq('status', 'Active'),
+        supabase.from('partner_service_availability').select('service_type, service_subtype').eq('is_enabled', false),
       ]);
+
       const map = {};
       (rows || []).forEach((row) => {
         map[keyFor(row.service_type, row.service_subtype)] = row.is_enabled;
       });
       setAvailability(map);
 
-      const globalMap = {};
-      (globalRes?.data || []).forEach((row) => {
-        globalMap[keyFor(row.service_type, row.service_subtype)] = row.is_enabled;
+      setTotalPartners(partnerCountRes?.count || 0);
+      const counts = {};
+      (disabledRes?.data || []).forEach((row) => {
+        const key = keyFor(row.service_type, row.service_subtype);
+        counts[key] = (counts[key] || 0) + 1;
       });
-      setGlobalAvailability(globalMap);
+      setDisabledCounts(counts);
     } catch (err) {
-      console.error('[ManageServices] load error:', err);
-      setError('Could not load your service settings. Please try again.');
+      console.error('[ServiceManage] load error:', err);
+      setError('Could not load service settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -145,22 +160,21 @@ const ManageServices = () => {
     return key in availability ? availability[key] : true;
   }, [availability]);
 
-  const isGloballyEnabled = useMemo(() => (type, subtype) => {
+  const offeringCount = useMemo(() => (type, subtype) => {
     const key = keyFor(type, subtype);
-    return key in globalAvailability ? globalAvailability[key] : true;
-  }, [globalAvailability]);
+    return Math.max(0, totalPartners - (disabledCounts[key] || 0));
+  }, [totalPartners, disabledCounts]);
 
   const handleToggle = async (type, subtype, label, nextValue) => {
-    if (!isGloballyEnabled(type, subtype)) return; // can't bypass the Admin restriction
     const key = keyFor(type, subtype);
     const prev = availability[key];
     setSavingKey(key);
     setAvailability((prevMap) => ({ ...prevMap, [key]: nextValue }));
     try {
-      await updateMyServiceAvailability([{ service_type: type, service_subtype: subtype, is_enabled: nextValue }]);
-      toast.success(`${label} service availability updated.`);
+      await updateGlobalServiceAvailability([{ service_type: type, service_subtype: subtype, is_enabled: nextValue }]);
+      toast.success(`${label} ${nextValue ? 'enabled' : 'disabled'} system-wide.`);
     } catch (err) {
-      console.error('[ManageServices] save error:', err);
+      console.error('[ServiceManage] save error:', err);
       setAvailability((prevMap) => ({ ...prevMap, [key]: prev }));
       toast.error(err?.response?.data?.error || err.message || `Failed to update ${label}.`);
     } finally {
@@ -169,33 +183,23 @@ const ManageServices = () => {
   };
 
   return (
-    <div className="min-h-screen pb-20 px-4 md:px-6 animate-in fade-in duration-500">
-      <div className="flex items-center gap-4 mb-8">
-        <Link
-          to="/partner/dashboard"
-          className="p-2 rounded-xl hover:bg-slate-200/80 text-slate-600 transition-colors inline-flex"
-          aria-label="Back to dashboard"
-        >
-          <ArrowLeft size={22} />
-        </Link>
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary-500/10 rounded-xl text-primary-600">
-            <Wrench size={26} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Manage Services</h1>
-            <p className="text-sm font-medium text-slate-500">
-              Choose the inquiry services your organization currently offers.
-            </p>
-          </div>
+    <div className="relative min-h-[400px] space-y-8 pb-10">
+      {loading && <PageLoader message="Loading service settings..." />}
+
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 bg-primary-500/10 rounded-xl text-primary-600">
+          <SlidersHorizontal size={26} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-display font-bold text-slate-900">Service Manage</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Enable or disable services system-wide. A service must be enabled here AND by the
+            Partner for it to appear during inquiry creation.
+          </p>
         </div>
       </div>
 
-      {loading ? (
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-12 flex items-center justify-center">
-          <Loader2 size={28} className="animate-spin text-primary-500" />
-        </div>
-      ) : error ? (
+      {!loading && error ? (
         <div className="bg-white rounded-3xl border border-red-100 shadow-soft p-8 text-center">
           <p className="text-red-600 font-semibold mb-4">{error}</p>
           <button
@@ -206,7 +210,7 @@ const ManageServices = () => {
             Retry
           </button>
         </div>
-      ) : (
+      ) : !loading ? (
         <div className="space-y-6">
           {SERVICE_GROUPS.map((group) => {
             const Icon = group.icon;
@@ -230,7 +234,7 @@ const ManageServices = () => {
                       enabled={isEnabled(group.type, item.subtype)}
                       saving={savingKey === keyFor(group.type, item.subtype)}
                       onToggle={(next) => handleToggle(group.type, item.subtype, item.label, next)}
-                      globallyEnabled={isGloballyEnabled(group.type, item.subtype)}
+                      offeringCount={offeringCount(group.type, item.subtype)}
                     />
                   ))}
                 </div>
@@ -238,9 +242,9 @@ const ManageServices = () => {
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
 
-export default ManageServices;
+export default ServiceManage;

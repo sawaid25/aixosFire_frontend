@@ -153,6 +153,10 @@ const VisitForm = () => {
   // Rows only exist for services a partner has explicitly toggled — a missing
   // row means "enabled" (see supabase/migrations/20260908110000_partner_service_availability.sql).
   const [partnerAvailability, setPartnerAvailability] = useState([]);
+  // Admin-level global switch — ANDed with the per-partner setting above. All 6 combos
+  // are always seeded (see supabase/migrations/20260914100000_service_availability_global.sql),
+  // but a missing row still defaults to enabled defensively.
+  const [globalAvailability, setGlobalAvailability] = useState([]);
   // Per-partner assigned-product cache, keyed by partner id — fetched once per
   // partner the agent selects, not on every render.
   const [partnerProductsCache, setPartnerProductsCache] = useState({});
@@ -198,17 +202,39 @@ const VisitForm = () => {
       }
     };
     fetchPartnerAvailability();
+
+    const fetchGlobalAvailability = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('service_availability')
+          .select('service_type, service_subtype, is_enabled');
+        if (error) throw error;
+        setGlobalAvailability(data || []);
+      } catch (err) {
+        console.error('Error fetching global service availability:', err);
+      }
+    };
+    fetchGlobalAvailability();
   }, []);
 
   /**
-   * A partner is eligible for (mode, validationMode) unless an explicit row
-   * says is_enabled = false — a missing row means enabled. `mode` is one of
-   * the ext.mode values ('Validation'/'Refill'/'New Unit'/'Maintenance');
-   * `validationMode` only matters for Validation/Refill and defaults to 'new'.
+   * A partner is eligible for (mode, validationMode) only when BOTH the Admin
+   * global switch AND the partner's own setting allow it — a missing row on
+   * either table means enabled. `mode` is one of the ext.mode values
+   * ('Validation'/'Refill'/'New Unit'/'Maintenance'); `validationMode` only
+   * matters for Validation/Refill and defaults to 'new'.
    */
   const isPartnerEligible = useCallback((partnerId, mode, validationMode) => {
-    if (!partnerId) return true;
     const subtype = ['Validation', 'Refill'].includes(mode) ? (validationMode || 'new') : 'default';
+
+    const globallyDisabled = globalAvailability.some((row) =>
+      row.service_type === mode &&
+      row.service_subtype === subtype &&
+      row.is_enabled === false
+    );
+    if (globallyDisabled) return false;
+
+    if (!partnerId) return true;
     const disabled = partnerAvailability.some((row) =>
       row.partner_id === partnerId &&
       row.service_type === mode &&
@@ -216,12 +242,34 @@ const VisitForm = () => {
       row.is_enabled === false
     );
     return !disabled;
-  }, [partnerAvailability]);
+  }, [partnerAvailability, globalAvailability]);
 
   /** Partners eligible for a given block's current mode/submode — what its <select> should list. */
   const getEligiblePartners = useCallback((mode, validationMode) =>
     partners.filter((p) => isPartnerEligible(p.id, mode, validationMode)),
   [partners, isPartnerEligible]);
+
+  /** True unless Admin has explicitly disabled this exact (mode, submode) combo globally. */
+  const isSubmodeGloballyAvailable = useCallback((mode, validationMode) => {
+    const subtype = ['Validation', 'Refill'].includes(mode) ? (validationMode || 'new') : 'default';
+    return !globalAvailability.some((row) =>
+      row.service_type === mode && row.service_subtype === subtype && row.is_enabled === false
+    );
+  }, [globalAvailability]);
+
+  /**
+   * Whether the top-level mode pill itself should even be offered — if Admin has
+   * turned a whole mode off (all of its sub-types, or its single 'default' one for
+   * New Unit/Maintenance), there's no point showing the tab at all: no partner could
+   * ever be selected under it, so an empty dropdown with no explanation is worse than
+   * just not offering the mode. Validation/Refill only disappear once every one of
+   * their 3 sub-types is off — any one still enabled keeps the tab (and that specific
+   * pill inside it) available.
+   */
+  const isModeGloballyAvailable = useCallback((mode) => {
+    const subtypes = ['Validation', 'Refill'].includes(mode) ? ['new', 'followup', 'license-renewal'] : ['default'];
+    return subtypes.some((subtype) => isSubmodeGloballyAvailable(mode, subtype));
+  }, [isSubmodeGloballyAvailable]);
 
   const fetchPartnerProducts = async (partnerId) => {
     if (!partnerId || partnerId === 'Other' || partnerProductsCache[partnerId]) return;
@@ -2684,7 +2732,9 @@ const VisitForm = () => {
 
                 {/* Mode Selection Buttons - Fully Responsive */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 pb-5 border-b border-slate-200">
-                  {['Validation', 'Refill', 'New Unit', 'Maintenance'].map((m) => (
+                  {['Validation', 'Refill', 'New Unit', 'Maintenance']
+                    .filter((m) => isModeGloballyAvailable(m) || ext.mode === m)
+                    .map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -2760,7 +2810,9 @@ const VisitForm = () => {
                     <>
                       <div className="md:col-span-4 mb-4">
                         <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
-                          {['new', 'followup', 'license-renewal'].map((mode) => (
+                          {['new', 'followup', 'license-renewal']
+                            .filter((mode) => isSubmodeGloballyAvailable('Validation', mode) || ext.validation_mode === mode)
+                            .map((mode) => (
                             <button
                               key={mode}
                               onClick={() => handleExtinguisherChange(index, 'validation_mode', mode)}
@@ -3182,7 +3234,9 @@ const VisitForm = () => {
                     <>
                       <div className="md:col-span-4 mb-4">
                         <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
-                          {['new', 'followup', 'license-renewal'].map((mode) => (
+                          {['new', 'followup', 'license-renewal']
+                            .filter((mode) => isSubmodeGloballyAvailable('Refill', mode) || (ext.validation_mode || 'new') === mode)
+                            .map((mode) => (
                             <button
                               key={mode}
                               onClick={() => handleExtinguisherChange(index, 'validation_mode', mode)}

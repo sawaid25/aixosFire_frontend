@@ -2,16 +2,18 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
+import toast from 'react-hot-toast';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import {
     ArrowLeft, Handshake, Tag, Activity, CheckCircle,
-    XCircle, Clock, Calendar, Package, TrendingUp
+    XCircle, Clock, Calendar, Package, TrendingUp, MessageCircle, Loader2
 } from 'lucide-react';
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
+import { getPartnerChatSettings, updatePartnerChatSettings } from '../../api/admin';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#3b82f6'];
@@ -34,6 +36,27 @@ const isServiceEnabled = (rows, type, subtype) => {
     return row ? row.is_enabled : true;
 };
 
+// Partner Chat Management — the 3 services this feature covers (License Renewal has its
+// own detail page, not the sub-type breakdown Validation/Refill use for availability).
+const CHAT_SERVICES = ['Maintenance', 'New Unit', 'License Renewal'];
+
+const ToggleSwitch = ({ checked, onChange, disabled }) => (
+    <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => !disabled && onChange(!checked)}
+        disabled={disabled}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${checked ? 'bg-emerald-500' : 'bg-slate-300'
+            } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+        <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'
+                }`}
+        />
+    </button>
+);
+
 const getBadgeClass = (s) => {
     const v = (s||'').toLowerCase();
     if (['completed','accepted','closed'].includes(v)) return 'bg-green-100 text-green-700';
@@ -48,6 +71,10 @@ const PartnerProfile = () => {
     const [inquiries, setInquiries] = useState([]);
     const [stickers, setStickers] = useState([]);
     const [serviceAvailability, setServiceAvailability] = useState([]);
+    // Map of service -> { chat_with_agent, chat_with_customer }; a missing entry means
+    // both enabled (same "missing row = enabled" default used everywhere else).
+    const [chatSettings, setChatSettings] = useState({});
+    const [chatSavingKey, setChatSavingKey] = useState(null);
     const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
@@ -59,6 +86,7 @@ const PartnerProfile = () => {
                     { data: iData },
                     { data: sData },
                     { data: avData },
+                    chatRows,
                 ] = await Promise.all([
                     supabase.from('partners').select('*').eq('id', id).maybeSingle(),
                     supabase.from('inquiries')
@@ -72,12 +100,21 @@ const PartnerProfile = () => {
                     supabase.from('partner_service_availability')
                         .select('service_type,service_subtype,is_enabled')
                         .eq('partner_id', id),
+                    getPartnerChatSettings(id).catch((err) => {
+                        console.error('Failed to load chat settings:', err);
+                        return [];
+                    }),
                 ]);
                 if (pErr) console.error('Failed to load partner:', pErr);
                 setPartner(pData);
                 setInquiries(iData || []);
                 setStickers(sData || []);
                 setServiceAvailability(avData || []);
+                const chatMap = {};
+                (chatRows || []).forEach((row) => {
+                    chatMap[row.service] = { chat_with_agent: row.chat_with_agent, chat_with_customer: row.chat_with_customer };
+                });
+                setChatSettings(chatMap);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -86,6 +123,28 @@ const PartnerProfile = () => {
         };
         load();
     }, [id]);
+
+    const isChatEnabled = (service, field) => {
+        const row = chatSettings[service];
+        return row ? row[field] : true;
+    };
+
+    const handleChatToggle = async (service, field, nextValue) => {
+        const key = `${service}::${field}`;
+        const prevRow = chatSettings[service] || { chat_with_agent: true, chat_with_customer: true };
+        setChatSavingKey(key);
+        setChatSettings((prev) => ({ ...prev, [service]: { ...prevRow, [field]: nextValue } }));
+        try {
+            await updatePartnerChatSettings(id, [{ service, [field]: nextValue }]);
+            toast.success(`${service} — ${field === 'chat_with_agent' ? 'Chat with Agent' : 'Chat with Customer'} ${nextValue ? 'enabled' : 'disabled'}.`);
+        } catch (err) {
+            console.error('[PartnerProfile] chat settings save error:', err);
+            setChatSettings((prev) => ({ ...prev, [service]: prevRow }));
+            toast.error(err?.response?.data?.error || err.message || 'Failed to update chat settings.');
+        } finally {
+            setChatSavingKey(null);
+        }
+    };
 
     const metrics = useMemo(() => {
         const total = inquiries.length;
@@ -203,6 +262,45 @@ const PartnerProfile = () => {
                             </div>
                         );
                     })}
+                </div>
+            </div>
+
+            {/* Chat Settings — Admin-controlled per-service Chat-with-Agent / Chat-with-Customer */}
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
+                <h3 className="text-sm font-bold text-slate-900 mb-1">Chat Settings</h3>
+                <p className="text-xs text-slate-500 mb-4">
+                    Control whether this Partner can chat with the Agent or Customer, per service.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {CHAT_SERVICES.map((service) => (
+                        <div key={service} className="border border-slate-100 rounded-2xl p-4 space-y-3">
+                            <p className="text-xs font-black text-slate-900 uppercase tracking-wider">{service}</p>
+                            {[
+                                { field: 'chat_with_agent', label: 'Chat with Agent' },
+                                { field: 'chat_with_customer', label: 'Chat with Customer' },
+                            ].map(({ field, label }) => {
+                                const enabled = isChatEnabled(service, field);
+                                const key = `${service}::${field}`;
+                                const saving = chatSavingKey === key;
+                                return (
+                                    <div key={field} className="flex items-center justify-between gap-3">
+                                        <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                            <MessageCircle size={12} className="text-slate-400" /> {label}
+                                        </span>
+                                        {saving ? (
+                                            <Loader2 size={16} className="animate-spin text-slate-400 shrink-0" />
+                                        ) : (
+                                            <ToggleSwitch
+                                                checked={enabled}
+                                                onChange={(next) => handleChatToggle(service, field, next)}
+                                                disabled={saving}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
                 </div>
             </div>
 

@@ -123,7 +123,7 @@ const InquiryChatBox = ({
                 const existing = messages.find(m => m.extinguisher_id);
                 if (existing) extinguisherId = existing.extinguisher_id;
             }
-            const result = await sendDirectMessage(user.id, recipientId, inquiryId, msgContent, currentRole, extinguisherId);
+            const result = await sendDirectMessage(user.id, recipientId, inquiryId, msgContent, currentRole, extinguisherId, (recipientRole || '').toLowerCase() || null);
             if (result) fetchMessages(false);
         } catch (e) {
             console.error('Send failed:', e);

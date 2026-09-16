@@ -25,6 +25,8 @@ import {
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { getInquiryById, updateInquiryStatus } from '../../api/partners';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../supabaseClient';
 import NewUnitDetailModal from './components/NewUnitDetailModal';
 import {
     acceptInquiry,
@@ -179,6 +181,12 @@ const PartnerActionCard = ({ onAccept, onAcceptWithDelivery, onReject, disabled,
 
 const InquiryItemDetailPage = () => {
     const { id: inquiryId, itemId } = useParams();
+    const { user } = useAuth();
+    const partnerId = user?.id;
+    // Admin-controlled Partner Chat Management (Maintenance/New Unit) — null until
+    // resolved, in which case both chat triggers render by default (see showCustomerChat/
+    // showAgentChat below), matching the "missing row = enabled" convention used elsewhere.
+    const [chatSettings, setChatSettings] = useState(null);
     const [inquiry, setInquiry] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -261,6 +269,40 @@ const InquiryItemDetailPage = () => {
             cancelled = true;
         };
     }, [inquiryId, inquiry]);
+
+    // Partner Chat Management — Admin-controlled Chat-with-Agent/Chat-with-Customer switches,
+    // scoped to Maintenance and New Unit on this page (License Renewal has its own page,
+    // RenewalInquiryDetail.jsx). Any other inquiry type reaching this page (e.g. Refill/
+    // Validation via an older link) is out of scope and left with unrestricted chat.
+    useEffect(() => {
+        if (!partnerId || !inquiry) {
+            setChatSettings(null);
+            return;
+        }
+        const typeKey = (inquiry.type || inquiry.inquiry_type || '').toString().trim().toLowerCase();
+        const service = typeKey === 'maintenance' ? 'Maintenance' : typeKey === 'new unit' ? 'New Unit' : null;
+        if (!service) {
+            setChatSettings(null);
+            return;
+        }
+        let cancelled = false;
+        supabase
+            .from('partner_chat_settings')
+            .select('chat_with_agent, chat_with_customer')
+            .eq('partner_id', partnerId)
+            .eq('service', service)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (cancelled) return;
+                if (error) {
+                    console.error('[InquiryItemDetailPage] chat settings fetch error:', error);
+                    setChatSettings({ chat_with_agent: true, chat_with_customer: true });
+                    return;
+                }
+                setChatSettings(data || { chat_with_agent: true, chat_with_customer: true });
+            });
+        return () => { cancelled = true; };
+    }, [partnerId, inquiry]);
 
     const item = inquiry?.inquiry_items?.find((row) => String(row.id) === String(itemId));
 
@@ -367,8 +409,14 @@ const InquiryItemDetailPage = () => {
     const isInquiryPending = (inquiry.status || '').toLowerCase() === 'pending';
     const inquiryTypeKey = (inquiry.type || inquiry.inquiry_type || '').toString().trim().toLowerCase();
     const isMaintenanceInquiry = inquiryTypeKey === 'maintenance';
+    const isNewUnitInquiry = inquiryTypeKey === 'new unit';
     const isRefilledInquiry = inquiryTypeKey === 'refill' || inquiryTypeKey === 'refilled';
     const isInquiryAccepted = (inquiry.status || '').toLowerCase() === 'accepted';
+    // Partner Chat Management — see the chatSettings effect above. `chatService` is null (and
+    // both chat triggers behave exactly as before) for anything other than Maintenance/New Unit.
+    const chatService = isMaintenanceInquiry ? 'Maintenance' : isNewUnitInquiry ? 'New Unit' : null;
+    const showCustomerChat = !chatService || chatSettings?.chat_with_customer !== false;
+    const showAgentChat = Boolean(chatService) && chatSettings?.chat_with_agent !== false;
     const canGenerateServiceReport =
         (inquiry.status || '').toLowerCase() === 'completed' || inquiry.service_confirmed === true;
 
@@ -984,22 +1032,42 @@ const InquiryItemDetailPage = () => {
                             approvalStatus={inquiry.approval_status}
                             scheduledDate={inquiry.scheduled_date}
                         />
-                        <InquiryChatBox
-                            inquiryId={inquiryId}
-                            recipientId={inquiry.customer_id}
-                            recipientRole="Customer"
-                            title="Chat with Customer"
-                        />
+                        {showCustomerChat && (
+                            <InquiryChatBox
+                                inquiryId={inquiryId}
+                                recipientId={inquiry.customer_id}
+                                recipientRole="Customer"
+                                title="Chat with Customer"
+                            />
+                        )}
+                        {showAgentChat && (
+                            <InquiryChatBox
+                                inquiryId={inquiryId}
+                                recipientId={inquiry.agent_id}
+                                recipientRole="Agent"
+                                title="Chat with Agent"
+                            />
+                        )}
                     </div>
                 )}
                 {!isMaintenanceInquiry && isInquiryAccepted && (
-                    <div className="lg:sticky lg:top-8 self-start w-full lg:w-[360px]">
-                        <InquiryChatBox
-                            inquiryId={inquiryId}
-                            recipientId={inquiry.customer_id}
-                            recipientRole="Customer"
-                            title="Chat with Customer"
-                        />
+                    <div className="lg:sticky lg:top-8 self-start flex flex-col gap-6 w-full lg:w-[360px]">
+                        {showCustomerChat && (
+                            <InquiryChatBox
+                                inquiryId={inquiryId}
+                                recipientId={inquiry.customer_id}
+                                recipientRole="Customer"
+                                title="Chat with Customer"
+                            />
+                        )}
+                        {showAgentChat && (
+                            <InquiryChatBox
+                                inquiryId={inquiryId}
+                                recipientId={inquiry.agent_id}
+                                recipientRole="Agent"
+                                title="Chat with Agent"
+                            />
+                        )}
                     </div>
                 )}
             </div>

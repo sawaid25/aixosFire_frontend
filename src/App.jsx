@@ -34,6 +34,7 @@ import AgentManagement from './pages/admin/Agents';
 import AgentProfile from './pages/admin/AgentProfile';
 import GlobalMap from './pages/admin/Map';
 import AdminServices from './pages/admin/Services';
+import ServiceManage from './pages/admin/ServiceManage';
 import AdminCustomers from './pages/admin/Customers';
 import CustomerProfile from './pages/admin/CustomerProfile';
 import ComplaintCenter from './pages/admin/ComplaintCenter';
@@ -153,6 +154,7 @@ function App() {
                   <Route path="products/:categoryId" element={<CategoryProducts />} />
                   <Route path="products/:categoryId/:productId" element={<AdminProductDetail />} />
                   <Route path="map" element={<GlobalMap />} />
+                  <Route path="service-manage" element={<ServiceManage />} />
                   <Route path="services" element={<AdminServices />} />
                   <Route path="operations" element={<Operations />} />
                   <Route path="complaints" element={<ComplaintCenter />} />

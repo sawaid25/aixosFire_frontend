@@ -56,7 +56,7 @@ export const getDirectMessagesHistory = async (senderId, receiverId, inquiryId =
 /**
  * Send a direct message and trigger a notification for the recipient.
  */
-export const sendDirectMessage = async (senderId, receiverId, inquiryId, content, senderRole = 'partner', extinguisherId = null) => {
+export const sendDirectMessage = async (senderId, receiverId, inquiryId, content, senderRole = 'partner', extinguisherId = null, receiverRole = null) => {
     console.group('💬 CHAT API: SENDING MESSAGE');
     console.log('Sender ID:', senderId);
     console.log('Recipient ID:', receiverId);
@@ -64,6 +64,7 @@ export const sendDirectMessage = async (senderId, receiverId, inquiryId, content
     console.log('Extinguisher ID:', extinguisherId);
     console.log('Content:', content);
     console.log('Sender Role:', senderRole);
+    console.log('Receiver Role:', receiverRole);
     console.groupEnd();
 
     try {
@@ -71,7 +72,10 @@ export const sendDirectMessage = async (senderId, receiverId, inquiryId, content
         const response = await client.post('/messages', {
             sender_id: senderId,
             receiver_id: receiverId,
-            receiver_role: senderRole === 'partner' ? 'customer' : 'partner',
+            // Prefer the actual recipient role the chat box knows (e.g. 'agent' for the
+            // Chat-with-Agent flows) — falling back to the old partner<->customer-only
+            // assumption only when the caller doesn't pass one, for backward compatibility.
+            receiver_role: receiverRole || (senderRole === 'partner' ? 'customer' : 'partner'),
             inquiry_id: inquiryId,
             extinguisher_id: extinguisherId,
             message: content

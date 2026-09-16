@@ -8,6 +8,7 @@ import InquiryChatBox from '../../../components/Chat/InquiryChatBox';
 import PartnerQuotationModal from './PartnerQuotationModal';
 import { fetchQuotationByInquiryId } from '../../../api/maintenanceApi';
 import { useAuth } from '../../../context/AuthContext';
+import { supabase } from '../../../supabaseClient';
 
 const STATUS_CARD_STYLE = {
     pending: 'bg-amber-50 border-amber-100',
@@ -60,6 +61,31 @@ const RenewalInquiryDetail = ({ viewModel, onAccept, onReject, actionLoading = f
     const [quotation, setQuotation] = useState(null);
     const [quotationLoading, setQuotationLoading] = useState(false);
     const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
+    // Admin-controlled Partner Chat Management for this service — null while loading; buttons
+    // render by default (matching the "missing row = enabled" convention used everywhere else)
+    // and only disappear if the fetch comes back with an explicit false.
+    const [chatSettings, setChatSettings] = useState(null);
+
+    useEffect(() => {
+        if (!partnerId) return;
+        let cancelled = false;
+        supabase
+            .from('partner_chat_settings')
+            .select('chat_with_agent, chat_with_customer')
+            .eq('partner_id', partnerId)
+            .eq('service', 'License Renewal')
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (cancelled) return;
+                if (error) {
+                    console.error('[RenewalInquiryDetail] chat settings fetch error:', error);
+                    setChatSettings({ chat_with_agent: true, chat_with_customer: true });
+                    return;
+                }
+                setChatSettings(data || { chat_with_agent: true, chat_with_customer: true });
+            });
+        return () => { cancelled = true; };
+    }, [partnerId]);
 
     const statusKey = (status || 'pending').toLowerCase();
     const hasQuotation = Boolean(quotation);
@@ -163,26 +189,30 @@ const RenewalInquiryDetail = ({ viewModel, onAccept, onReject, actionLoading = f
                 />
             </div>
 
-            {/* Chat triggers */}
+            {/* Chat triggers — Admin-controlled per Partner + service (Partner Chat Management) */}
             <div className="px-6 md:px-8 lg:px-10 pt-6 flex flex-wrap gap-3">
-                <button
-                    type="button"
-                    onClick={() => setOpenChat((prev) => (prev === 'customer' ? null : 'customer'))}
-                    disabled={!customerId || !inquiryId}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-slate-200 ${openChat === 'customer' ? 'bg-primary-600 text-white' : 'bg-slate-900 text-white hover:bg-primary-600'
-                        } disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none`}
-                >
-                    <MessageCircle size={14} /> Chat with Customer
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setOpenChat((prev) => (prev === 'agent' ? null : 'agent'))}
-                    disabled={!agentId || !inquiryId}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-slate-200 ${openChat === 'agent' ? 'bg-primary-600 text-white' : 'bg-slate-700 text-white hover:bg-primary-600'
-                        } disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none`}
-                >
-                    <User size={14} /> Chat with Agent
-                </button>
+                {chatSettings?.chat_with_customer !== false && (
+                    <button
+                        type="button"
+                        onClick={() => setOpenChat((prev) => (prev === 'customer' ? null : 'customer'))}
+                        disabled={!customerId || !inquiryId}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-slate-200 ${openChat === 'customer' ? 'bg-primary-600 text-white' : 'bg-slate-900 text-white hover:bg-primary-600'
+                            } disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none`}
+                    >
+                        <MessageCircle size={14} /> Chat with Customer
+                    </button>
+                )}
+                {chatSettings?.chat_with_agent !== false && (
+                    <button
+                        type="button"
+                        onClick={() => setOpenChat((prev) => (prev === 'agent' ? null : 'agent'))}
+                        disabled={!agentId || !inquiryId}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-slate-200 ${openChat === 'agent' ? 'bg-primary-600 text-white' : 'bg-slate-700 text-white hover:bg-primary-600'
+                            } disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none`}
+                    >
+                        <User size={14} /> Chat with Agent
+                    </button>
+                )}
             </div>
 
             {openChat === 'customer' && customerId && inquiryId && (
