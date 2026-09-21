@@ -31,6 +31,20 @@ export const updateGlobalServiceAvailability = async (updates) => {
     }
 };
 
+/** Admin Per-Partner Service Control — a more granular override on top of the global switch
+ * above, scoped to one Partner. Only ever writes admin_enabled; never touches the Partner's
+ * own is_enabled preference.
+ * @param {{service_type: string, service_subtype?: string, admin_enabled: boolean}[]} updates */
+export const updatePartnerServiceAvailability = async (partnerId, updates) => {
+    try {
+        const response = await client.put(`/admin/partners/${partnerId}/service-availability`, { updates });
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error updating partner service availability:', error);
+        throw error;
+    }
+};
+
 /** Partner Chat Management — per-Partner, per-service Chat-with-Agent / Chat-with-Customer switches. */
 export const getPartnerChatSettings = async (partnerId) => {
     try {
@@ -49,6 +63,40 @@ export const updatePartnerChatSettings = async (partnerId, updates) => {
         return extractApiData(response, []);
     } catch (error) {
         console.error('Error updating partner chat settings:', error);
+        throw error;
+    }
+};
+
+/** General Inquiry routing — which Admin account(s) get notified when an Agent creates
+ * a General Inquiry (no Partner offers the selected product/service). */
+export const getGeneralInquiryAdmins = async () => {
+    try {
+        const response = await client.get('/admin/general-inquiry-admins');
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error fetching General Inquiry admins:', error);
+        throw error;
+    }
+};
+
+/** @param {{admin_id: number, receives_general_inquiries: boolean}[]} updates */
+export const updateGeneralInquiryAdmins = async (updates) => {
+    try {
+        const response = await client.put('/admin/general-inquiry-admins', { updates });
+        return extractApiData(response, []);
+    } catch (error) {
+        console.error('Error updating General Inquiry admins:', error);
+        throw error;
+    }
+};
+
+/** Admin manually routing a General Inquiry (or any unassigned inquiry) to an eligible Partner. */
+export const assignInquiryPartner = async (inquiryId, partnerId) => {
+    try {
+        const response = await client.put(`/admin/inquiries/${inquiryId}/assign-partner`, { partner_id: partnerId });
+        return extractApiData(response, null);
+    } catch (error) {
+        console.error('Error assigning partner to inquiry:', error);
         throw error;
     }
 };

@@ -35,6 +35,7 @@ const CORE_INQUIRY_KEYS = new Set([
   'performed_by',
   'follow_up_date',
   'qr_code_value',
+  'is_general_inquiry',
 ]);
 
 function normalizeStickerUsedFor(typeValue) {
@@ -67,7 +68,7 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     itemsArr.length > 0 &&
     itemsArr.every((it) => PARTNER_OPTIONAL_SUBMODES.has(it.validation_mode ?? 'new'));
 
-  if (normalizedType && !inquiryData?.partner_id && !isFollowupOnlyValidation) {
+  if (normalizedType && !inquiryData?.partner_id && !isFollowupOnlyValidation && !inquiryData?.is_general_inquiry) {
     const err = new Error('Partner is required for this inquiry type');
     err.status = 400;
     throw err;
@@ -109,19 +110,52 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     if (inquiryData?.partner_id) {
       const { data: availabilityRows, error: availabilityErr } = await supabase
         .from('partner_service_availability')
-        .select('service_type, service_subtype, is_enabled')
+        .select('service_type, service_subtype, is_enabled, admin_enabled')
         .eq('partner_id', inquiryData.partner_id)
-        .eq('service_type', inquiryData.type)
-        .eq('is_enabled', false);
+        .eq('service_type', inquiryData.type);
 
       if (availabilityErr) {
         console.warn('[createInquiryViaSupabase] availability pre-check failed, deferring to DB trigger:', availabilityErr);
       } else {
-        const disabledSubtype = (availabilityRows || []).find((row) => combos.has(`${row.service_type}::${row.service_subtype}`));
+        const relevantRows = (availabilityRows || []).filter((row) => combos.has(`${row.service_type}::${row.service_subtype}`));
+
+        // Admin's per-partner override — independent of, and checked before, the Partner's own preference.
+        const adminDisabled = relevantRows.find((row) => row.admin_enabled === false);
+        if (adminDisabled) {
+          const err = new Error(`This service has been disabled by Admin for this Partner (${inquiryData.type} ${adminDisabled.service_subtype}).`);
+          err.status = 409;
+          throw err;
+        }
+
+        const disabledSubtype = relevantRows.find((row) => row.is_enabled === false);
         if (disabledSubtype) {
           const err = new Error(`This Partner does not currently offer ${inquiryData.type} ${disabledSubtype.service_subtype} services.`);
           err.status = 409;
           throw err;
+        }
+      }
+
+      // Friendly pre-check for the product-assignment rule — enforce_inquiry_item_product_assignment
+      // (the BEFORE INSERT trigger on inquiry_items) is the real, unbypassable enforcement; this just
+      // gives a clean 409 instead of a raw Postgres exception before attempting the insert.
+      const productIds = Array.from(new Set(itemsArr.map((it) => it.product_id).filter(Boolean)));
+      if (productIds.length > 0) {
+        const { data: assignedRows, error: assignedErr } = await supabase
+          .from('partner_products')
+          .select('product_id')
+          .eq('partner_id', inquiryData.partner_id)
+          .in('product_id', productIds);
+
+        if (assignedErr) {
+          console.warn('[createInquiryViaSupabase] product-assignment pre-check failed, deferring to DB trigger:', assignedErr);
+        } else {
+          const assignedSet = new Set((assignedRows || []).map((r) => r.product_id));
+          const unassignedProductId = productIds.find((id) => !assignedSet.has(id));
+          if (unassignedProductId) {
+            const err = new Error('One of the selected products is not assigned to this Partner.');
+            err.status = 409;
+            throw err;
+          }
         }
       }
     }
@@ -169,6 +203,7 @@ export async function createInquiryViaSupabase(inquiryData, items) {
     'internal_reference_number',
     'notes',
     'preferred_date',
+    'is_general_inquiry',
   ];
 
   optionalInquiryKeys.forEach((k) => {
@@ -299,6 +334,44 @@ export async function createInquiryViaSupabase(inquiryData, items) {
       title: 'New Renewal Request',
     }]);
     if (notifyErr) console.error('[createInquiryViaSupabase] renewal notification insert error:', notifyErr);
+  }
+
+  // General Inquiry (no Partner offers this product/service — see
+  // supabase/migrations/20260917100000_general_inquiry_routing_columns.sql) notifies
+  // whichever Admin(s) are configured to receive it (or every Admin, if none are).
+  // Best-effort: a notification failure never fails inquiry creation.
+  if (inquiryData.is_general_inquiry && !inquiryData.partner_id) {
+    try {
+      const { data: recipientIds, error: recipientsErr } = await supabase.rpc('get_general_inquiry_recipient_ids');
+      if (recipientsErr) throw recipientsErr;
+
+      const [{ data: customerRow }, { data: agentRow }] = await Promise.all([
+        supabase.from('customers').select('business_name').eq('id', customerId).maybeSingle(),
+        inquiryData.agent_id
+          ? supabase.from('agents').select('name').eq('id', inquiryData.agent_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      const customerName = customerRow?.business_name || 'a customer';
+      const agentName = agentRow?.name || 'An Agent';
+
+      const rows = (recipientIds || []).map((row) => ({
+        sender_id: inquiryData.agent_id ? String(inquiryData.agent_id) : null,
+        sender_role: 'Agent',
+        recipient_id: String(row.id),
+        recipient_role: 'Admin',
+        message: `Agent ${agentName} created a General Inquiry for ${customerName} (${inquiryData.type}). No Partner was available — please review and assign one.`,
+        inquiry_id: inquiryId,
+        type: 'general_inquiry',
+        title: 'New General Inquiry',
+      }));
+
+      if (rows.length > 0) {
+        const { error: notifyAdminErr } = await supabase.from('notifications').insert(rows);
+        if (notifyAdminErr) console.error('[createInquiryViaSupabase] general inquiry notification insert error:', notifyAdminErr);
+      }
+    } catch (err) {
+      console.error('[createInquiryViaSupabase] general inquiry admin notification failed:', err);
+    }
   }
 
   if (shouldConsumeSticker) {

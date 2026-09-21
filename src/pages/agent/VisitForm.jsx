@@ -19,8 +19,14 @@ import imageCompression from 'browser-image-compression';
 import CameraCapture from '../../components/CameraCapture';
 import CustomerHistoryModal from '../../components/CustomerHistoryModal';
 import VisitQrScanner from '../../components/VisitQrScanner';
+import { subtypeForMode, getEligiblePartnersForProduct, buildPartnerProductsMap } from '../../utils/productPartnerEligibility';
 
 const EXPECTED_VISIT_QR = 'TM-EPKSA-A2026';
+
+/** Sentinel `ext.partner` value meaning "no Partner offers this product/service — route
+ * to Admin instead" (see Admin General Inquiry routing). Distinct from '' (nothing
+ * picked yet), 'Other' (custom partner name), and any real partner UUID. */
+const GENERAL_INQUIRY = '__GENERAL__';
 
 /** Visit images (customer, validation ref, maintenance unit): max size after compression (45KB) */
 const MAX_VISIT_IMAGE_BYTES = 45 * 1024;
@@ -161,6 +167,15 @@ const VisitForm = () => {
   // partner the agent selects, not on every render.
   const [partnerProductsCache, setPartnerProductsCache] = useState({});
   const [loadingPartnerProducts, setLoadingPartnerProducts] = useState({});
+  // Catalog-wide active products (all categories, not scoped to any Partner) — used to
+  // let the Agent pick a Product BEFORE a Partner is known, so eligible Partners can be
+  // computed from it (New Unit / Maintenance / Refill "new"). Fetched once in full, same
+  // pattern as partnerAvailability/globalAvailability above.
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [loadingCatalogProducts, setLoadingCatalogProducts] = useState(false);
+  // product_id -> Set<partner_id>, built from a full partner_products read — lets
+  // "which Partners have this product assigned" be answered client-side instantly.
+  const [productPartnersMap, setProductPartnersMap] = useState(new Map());
   const debounceTimers = useRef([]);
   const searchDebounceRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -194,7 +209,7 @@ const VisitForm = () => {
       try {
         const { data, error } = await supabase
           .from('partner_service_availability')
-          .select('partner_id, service_type, service_subtype, is_enabled');
+          .select('partner_id, service_type, service_subtype, is_enabled, admin_enabled');
         if (error) throw error;
         setPartnerAvailability(data || []);
       } catch (err) {
@@ -215,6 +230,37 @@ const VisitForm = () => {
       }
     };
     fetchGlobalAvailability();
+
+    const fetchCatalogProducts = async () => {
+      setLoadingCatalogProducts(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, model_number, description, image_url, is_active, categories(name)')
+          .eq('is_active', true);
+        if (error) throw error;
+        const products = (data || []).map(p => ({ ...p, category: p.categories?.name || 'Other' }));
+        setCatalogProducts(products);
+      } catch (err) {
+        console.error('Error fetching catalog products:', err);
+      } finally {
+        setLoadingCatalogProducts(false);
+      }
+    };
+    fetchCatalogProducts();
+
+    const fetchProductPartnersMap = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('partner_products')
+          .select('partner_id, product_id');
+        if (error) throw error;
+        setProductPartnersMap(buildPartnerProductsMap(data));
+      } catch (err) {
+        console.error('Error fetching product/partner assignments:', err);
+      }
+    };
+    fetchProductPartnersMap();
   }, []);
 
   /**
@@ -235,11 +281,13 @@ const VisitForm = () => {
     if (globallyDisabled) return false;
 
     if (!partnerId) return true;
+    // Admin's per-partner override (admin_enabled) and the Partner's own preference
+    // (is_enabled) are independent — either one being off makes this partner ineligible.
     const disabled = partnerAvailability.some((row) =>
       row.partner_id === partnerId &&
       row.service_type === mode &&
       row.service_subtype === subtype &&
-      row.is_enabled === false
+      (row.is_enabled === false || row.admin_enabled === false)
     );
     return !disabled;
   }, [partnerAvailability, globalAvailability]);
@@ -313,7 +361,232 @@ const VisitForm = () => {
     return products.filter(p => (p.category || 'Other') === category);
   };
 
+  /** Category names among ALL active catalog products — used before a real Partner is committed. */
+  const getCatalogCategories = () => Array.from(new Set(catalogProducts.map(p => p.category || 'Other'))).sort();
+
+  /** Catalog-wide active products within one category — used before a real Partner is committed. */
+  const getCatalogMaterials = (category) => {
+    if (!category || category === 'Other') return [];
+    return catalogProducts.filter(p => (p.category || 'Other') === category);
+  };
+
+  /** Once a real Partner (not General Inquiry, not "Other") is committed, Category/Material
+   * scope down to that Partner's own catalog — same as today. Until then (nothing picked
+   * yet, General Inquiry, or a custom "Other" partner), they source from the full catalog
+   * so eligible Partners can be computed from whatever Product the Agent picks. */
+  const isPartnerCatalogScoped = (partnerId) => Boolean(partnerId) && partnerId !== GENERAL_INQUIRY && partnerId !== 'Other';
+
+  const getCategoryOptionsFor = (ext) =>
+    isPartnerCatalogScoped(ext.partner) ? getPartnerAssignedCategories(ext.partner) : getCatalogCategories();
+
+  const getMaterialOptionsFor = (ext, category) =>
+    isPartnerCatalogScoped(ext.partner) ? getPartnerAssignedMaterials(ext.partner, category) : getCatalogMaterials(category);
+
+  /** Partners eligible for a given Product + this block's mode/sub-type — the core
+   * "Product assigned to Partner AND Partner offers this service" rule from the shared
+   * utility, bound to this form's currently-loaded data. */
+  const getEligiblePartnersForProductLocal = (productId, mode, validationMode) =>
+    getEligiblePartnersForProduct(productId, mode, subtypeForMode(mode, validationMode), {
+      partners, partnerProductsMap: productPartnersMap, partnerAvailability, globalAvailability,
+    });
+
+  /**
+   * Product-first Partner field for New Unit / Maintenance / Refill "new" — renders one
+   * of: a plain Partner select (once a Product determines who's eligible, or once a real
+   * Partner is already committed), a "select a product first" placeholder, a General
+   * Inquiry confirmation badge, or the "no Partner available" empty state offering
+   * General Inquiry. `productId` is the currently-selected anchor product for this block
+   * (ext.productId for Refill, or the in-progress Material pick for New Unit/Maintenance).
+   */
+  const renderPartnerField = (ext, index, mode, validationMode, productId, { idSuffix = '' } = {}) => {
+    if (ext.partner === GENERAL_INQUIRY) {
+      return (
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <span className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+              <AlertTriangle size={14} className="shrink-0" /> General Inquiry (no Partner available)
+            </span>
+            <button
+              type="button"
+              onClick={() => handleExtinguisherChange(index, 'partner', '')}
+              disabled={ext.newUnits?.length > 0}
+              className="text-xs font-bold text-primary-600 hover:underline shrink-0 disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+            >
+              Change
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (ext.partner === 'Other') {
+      return (
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+          <select
+            value={ext.partner}
+            onChange={(e) => handlePartnerSelect(index, e.target.value)}
+            className="input-field py-2 text-sm"
+          >
+            <option value="Other">Other (Custom Partner)</option>
+            <option value="">Change Partner...</option>
+          </select>
+          <div className="mt-3 animate-fade-in">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+              Specify Partner Name
+            </label>
+            <input
+              type="text"
+              value={ext.customPartner || ''}
+              onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
+              placeholder="e.g. ABC Fire Refilling Co."
+              className="input-field py-2 text-sm"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // A real Partner is already committed — keep it selectable/changeable, but don't let a
+    // momentarily-empty productId (e.g. between picking a new Category and a new Material
+    // for a 2nd+ sub-unit) blank out the field; fall back to just the committed Partner.
+    if (ext.partner) {
+      const eligible = productId
+        ? getEligiblePartnersForProductLocal(productId, mode, validationMode)
+        : partners.filter((p) => p.id === ext.partner);
+      return (
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+          <select
+            value={ext.partner}
+            onChange={(e) => handlePartnerSelect(index, e.target.value)}
+            disabled={ext.newUnits?.length > 0}
+            className={`input-field py-2 text-sm ${ext.newUnits?.length > 0 ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
+          >
+            {eligible.map((p) => (
+              <option key={p.id} value={p.id}>{p.business_name}</option>
+            ))}
+            <option value="Other">Other (Custom Partner)</option>
+          </select>
+          {ext.newUnits?.length > 0 && (
+            <p className="text-[11px] text-slate-400 mt-1">Remove all added items to change Partner.</p>
+          )}
+        </div>
+      );
+    }
+
+    if (!productId) {
+      return (
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+          <div className="input-field py-2 text-sm text-slate-400 bg-slate-50">Select a product first</div>
+        </div>
+      );
+    }
+
+    const eligible = getEligiblePartnersForProductLocal(productId, mode, validationMode);
+
+    if (eligible.length === 0) {
+      return (
+        <div className="sm:col-span-2 lg:col-span-1">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-bold text-amber-800">No Partner is currently available for this product.</p>
+            <button
+              type="button"
+              onClick={() => handleExtinguisherChange(index, 'partner', GENERAL_INQUIRY)}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 transition-colors"
+            >
+              Select General Inquiry
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <label
+          htmlFor={`partner${idSuffix}-${index}`}
+          className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
+        >
+          Partner
+        </label>
+        <select
+          id={`partner${idSuffix}-${index}`}
+          value={ext.partner || ''}
+          onChange={(e) => handlePartnerSelect(index, e.target.value)}
+          className="input-field py-2 text-sm"
+        >
+          <option value="">Select Partner</option>
+          {eligible.map((p) => (
+            <option key={p.id} value={p.id}>{p.business_name}</option>
+          ))}
+          <option value="Other">Other (Custom Partner)</option>
+        </select>
+      </div>
+    );
+  };
+
   /** Product picker shown once a real (non-"Other") Partner is selected — only that Partner's active assigned products appear. */
+  /** Catalog-wide, required Product picker for Refill "new" — same grouped-<optgroup>
+   * shape as renderProductPicker below, but sourced from ALL active products (not a
+   * chosen Partner's) since Product is picked before Partner in this flow. */
+  const renderCatalogProductPicker = (ext, index) => {
+    const selected = catalogProducts.find(p => p.id === ext.productId);
+    const grouped = catalogProducts.reduce((acc, p) => {
+      const key = p.category || 'Other';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(p);
+      return acc;
+    }, {});
+
+    return (
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Product</label>
+        {loadingCatalogProducts ? (
+          <div className="input-field py-2 text-sm text-slate-400 flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
+            Loading products…
+          </div>
+        ) : (
+          <>
+            <select
+              value={ext.productId || ''}
+              onChange={(e) => {
+                const newProductId = e.target.value;
+                handleExtinguisherChange(index, 'productId', newProductId);
+                if (ext.partner && ext.partner !== GENERAL_INQUIRY && ext.partner !== 'Other') {
+                  const stillEligible = getEligiblePartnersForProductLocal(newProductId, ext.mode, ext.validation_mode)
+                    .some(p => p.id === ext.partner);
+                  if (!stillEligible) handleExtinguisherChange(index, 'partner', '');
+                }
+              }}
+              className="input-field py-2 text-sm"
+              required
+              disabled={ext.isLocked}
+            >
+              <option value="">Select Product</option>
+              {Object.entries(grouped).map(([category, items]) => (
+                <optgroup key={category} label={category}>
+                  {items.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {selected?.description && (
+              <p className="text-xs text-slate-400 mt-1.5">{selected.description}</p>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderProductPicker = (ext, index) => {
     if (!ext.partner || ext.partner === 'Other') return null;
     const isLoading = Boolean(loadingPartnerProducts[ext.partner]);
@@ -668,7 +941,9 @@ const VisitForm = () => {
 
   const inquiryTypeNeedsPartner = (typeValue) => {
     const t = String(typeValue || '').trim().toLowerCase();
-    return t === 'validation' || t === 'refill' || t === 'refilled';
+    // New Unit / Maintenance now require a Partner-or-General-Inquiry decision too (product-first
+    // eligibility, see renderPartnerField) — previously they had no such requirement at all.
+    return t === 'validation' || t === 'refill' || t === 'refilled' || t === 'new unit' || t === 'maintenance';
   };
 
   const handleQrDecoded = (text, extIndex) => {
@@ -722,6 +997,11 @@ const VisitForm = () => {
           return item;
         }
 
+        if (!item.partner) {
+          alert("Please select a Partner (or General Inquiry) before adding.");
+          return item;
+        }
+
         // Check for 'Other' validation
         if (item.firefightingSystem === 'Other' && (!item.customFirefightingSystem || !item.customFirefightingSystem.trim())) {
           alert("Please specify the System name.");
@@ -738,7 +1018,8 @@ const VisitForm = () => {
           material: item.material === 'Other' ? item.customMaterial : item.material,
           unit: item.unit || 'Pieces',
           quantity: item.quantity || 1,
-          catalog_no: `CAT-${Math.floor(1000 + Math.random() * 9000)}`
+          catalog_no: `CAT-${Math.floor(1000 + Math.random() * 9000)}`,
+          productId: item.productId || null,
         };
 
         return {
@@ -746,6 +1027,7 @@ const VisitForm = () => {
           newUnits: [...(item.newUnits || []), newSubUnit],
           firefightingSystem: '',   // reset
           material: '',
+          productId: '',
           unit: 'Pieces',
           quantity: 1
         };
@@ -1023,6 +1305,8 @@ const VisitForm = () => {
             validation_mode: 'new',
             partner: stillEligible ? item.partner : '',
             customPartner: stillEligible ? item.customPartner : '',
+            // A different mode's anchor product (if any) no longer applies.
+            productId: '',
             licenseNumber: '',
             licenseAuthority: '',
             licenseRenewalDate: '',
@@ -1055,6 +1339,7 @@ const VisitForm = () => {
             hasChanges: false,
             partner: stillEligible ? item.partner : '',
             customPartner: stillEligible ? item.customPartner : '',
+            productId: stillEligible ? item.productId : '',
             ...cleared,
           };
         }
@@ -1068,10 +1353,15 @@ const VisitForm = () => {
         if (field === 'type' && value !== 'Other') updated.customType = '';
         if (field === 'partner') {
           updated.customPartner = value !== 'Other' ? '' : updated.customPartner;
-          // A product picked for the previous partner may not belong to the
-          // new one — the partner_products DB trigger would reject it anyway,
-          // so clear it here rather than let the agent submit a stale pick.
-          updated.productId = '';
+          // General Inquiry has no real catalog to check against — keep the anchor
+          // product for traceability. Otherwise, only keep it if it's still assigned
+          // to the newly-picked partner (the partner_products DB trigger would reject
+          // it anyway) — a product picked before any partner was chosen (New Unit /
+          // Maintenance / Refill "new") is exactly what determined this partner, so it
+          // legitimately survives the switch.
+          updated.productId = (value === GENERAL_INQUIRY || (item.productId && productPartnersMap.get(item.productId)?.has(value)))
+            ? item.productId
+            : '';
         }
         if (field === 'material' && value !== 'Other') updated.customMaterial = '';
         if (field === 'firefightingSystem' && value !== 'Other') updated.customFirefightingSystem = '';
@@ -2029,7 +2319,7 @@ const VisitForm = () => {
                 system: sub.firefightingSystem || null,
                 status: 'New',
                 catalog_no: sub.catalog_no || null,
-                product_id: item.productId || null,
+                product_id: sub.productId || null,
                 maintenance_notes: item.maintenanceNotes || null,
                 maintenance_voice_url: voiceUrl,
                 maintenance_unit_photo_url: photoUrl,
@@ -2047,11 +2337,16 @@ const VisitForm = () => {
           }
         }
 
+        // No Partner offers this product/service — routes to Admin as a General
+        // Inquiry instead of a real Partner assignment (see renderPartnerField).
+        const isGeneralInquiry = selectedPartnerId === GENERAL_INQUIRY;
+
         // C. Call Backend API to create the full inquiry in one shot
         const inquiryData = {
           inquiry_no: inquiryNo,
           customer_id: finalCustId,
-          partner_id: selectedPartnerId, // Only one partner is allowed per visit
+          partner_id: isGeneralInquiry ? null : selectedPartnerId, // Only one partner is allowed per visit
+          is_general_inquiry: isGeneralInquiry,
           agent_id: user.id,
           visit_id: visitId,
           type: inquiryType,
@@ -2934,45 +3229,7 @@ const VisitForm = () => {
                     <div className="col-span-4 space-y-6 animate-fade-in">
 
                       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-end gap-4">
-                        {/* Partner — chosen first, so System Category/Material can be limited to what's assigned to them */}
-                        <div>
-                          <label
-                            htmlFor={`partner-${index}`}
-                            className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
-                          >
-                            Partner
-                          </label>
-                          <select
-                            id={`partner-${index}`}
-                            value={ext.partner || ''}
-                            onChange={(e) => handlePartnerSelect(index, e.target.value)}
-                            className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                            disabled={loadingPartners || ext.isLocked}
-                          >
-                            <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                            {getEligiblePartners(ext.mode, null).map(p => (
-                              <option key={p.id} value={p.id}>{p.business_name}</option>
-                            ))}
-                            <option value="Other">Other (Custom Partner)</option>
-                          </select>
-                          {ext.partner === 'Other' && (
-                            <div className="mt-3 animate-fade-in">
-                              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                                Specify Partner Name
-                              </label>
-                              <input
-                                type="text"
-                                value={ext.customPartner || ''}
-                                onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
-                                disabled={ext.isLocked}
-                                placeholder="e.g. ABC Fire Refilling Co."
-                                className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                              />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Fire Fighting System Category — limited to categories assigned to the selected Partner */}
+                        {/* System Category — catalog-wide until a real Partner is committed, then scoped to that Partner */}
                         <div>
                           <label
                             htmlFor={`ff-system-${index}`}
@@ -2983,19 +3240,23 @@ const VisitForm = () => {
                           <select
                             id={`ff-system-${index}`}
                             value={ext.firefightingSystem || ''}
-                            onChange={(e) => handleExtinguisherChange(index, 'firefightingSystem', e.target.value)}
+                            onChange={(e) => {
+                              handleExtinguisherChange(index, 'firefightingSystem', e.target.value);
+                              handleExtinguisherChange(index, 'material', '');
+                              handleExtinguisherChange(index, 'productId', '');
+                            }}
                             disabled={ext.isLocked}
                             className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                           >
                             <option value="">
-                              {!ext.partner ? 'Select Partner first' : loadingPartnerProducts[ext.partner] ? 'Loading...' : 'Select...'}
+                              {isPartnerCatalogScoped(ext.partner) && loadingPartnerProducts[ext.partner] ? 'Loading...' : loadingCatalogProducts ? 'Loading...' : 'Select...'}
                             </option>
-                            {getPartnerAssignedCategories(ext.partner).map(sys => (
+                            {getCategoryOptionsFor(ext).map(sys => (
                               <option key={sys} value={sys}>{sys}</option>
                             ))}
                             <option>Other</option>
                           </select>
-                          {ext.partner && ext.partner !== 'Other' && !loadingPartnerProducts[ext.partner] && getPartnerAssignedCategories(ext.partner).length === 0 && (
+                          {isPartnerCatalogScoped(ext.partner) && !loadingPartnerProducts[ext.partner] && getCategoryOptionsFor(ext).length === 0 && (
                             <p className="text-xs text-amber-700 mt-1.5">No categories assigned to this Partner yet.</p>
                           )}
                           {ext.firefightingSystem === 'Other' && (
@@ -3016,28 +3277,37 @@ const VisitForm = () => {
                           )}
                         </div>
 
-                        {/* Material — limited to the selected Partner's assigned products within this category */}
+                        {/* Product — catalog-wide until a real Partner is committed, then scoped to that Partner */}
                         <div>
                           <label
                             htmlFor={`material-${index}`}
                             className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
                           >
-                            Material
+                            Product
                           </label>
                           <select
                             id={`material-${index}`}
                             value={ext.material || ''}
                             onChange={(e) => {
                               const mat = e.target.value;
+                              const options = getMaterialOptionsFor(ext, ext.firefightingSystem);
+                              const match = mat !== 'Other' ? options.find(p => p.name === mat) : null;
+                              const newProductId = match ? match.id : '';
                               handleExtinguisherChange(index, 'material', mat);
                               handleExtinguisherChange(index, 'unit', getDefaultUnit(mat));
+                              handleExtinguisherChange(index, 'productId', newProductId);
+                              if (ext.partner && ext.partner !== GENERAL_INQUIRY && ext.partner !== 'Other' && (ext.newUnits?.length || 0) === 0) {
+                                const stillEligible = getEligiblePartnersForProductLocal(newProductId, ext.mode, null)
+                                  .some(p => p.id === ext.partner);
+                                if (!stillEligible) handleExtinguisherChange(index, 'partner', '');
+                              }
                             }}
                             disabled={ext.isLocked || !ext.firefightingSystem}
                             className={`input-field py-2 text-sm ${ext.isLocked || !ext.firefightingSystem ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                           >
-                            <option value="">Select Material</option>
+                            <option value="">Select Product</option>
                             {ext.firefightingSystem &&
-                              getPartnerAssignedMaterials(ext.partner, ext.firefightingSystem).map(p => (
+                              getMaterialOptionsFor(ext, ext.firefightingSystem).map(p => (
                                 <option key={p.id} value={p.name}>
                                   {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
                                 </option>
@@ -3061,6 +3331,9 @@ const VisitForm = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Partner — computed from the Product above (or General Inquiry when none are eligible) */}
+                        {renderPartnerField(ext, index, ext.mode, null, ext.productId)}
 
                         {/* Unit (Meter / Pieces) */}
                         <div>
@@ -3107,10 +3380,11 @@ const VisitForm = () => {
                           disabled={
                             !ext.firefightingSystem ||
                             !ext.material ||
+                            !ext.partner ||
                             (ext.quantity || 0) < 1 ||
                             ext.isLocked
                           }
-                          className={`w-full text-xs !h-[50px] py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${(!ext.firefightingSystem || !ext.material || (ext.quantity || 0) < 1)
+                          className={`w-full text-xs !h-[50px] py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${(!ext.firefightingSystem || !ext.material || !ext.partner || (ext.quantity || 0) < 1)
                             ? 'bg-gray-400 cursor-not-allowed text-white'
                             : 'bg-primary-600 hover:bg-primary-700 text-white'
                             }`}
@@ -3253,39 +3527,9 @@ const VisitForm = () => {
 
                       {(ext.validation_mode || 'new') === 'new' ? (
                         <>
-                          <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Partner</label>
-                            <select
-                              value={ext.partner}
-                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
-                              className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                              disabled={loadingPartners || ext.isLocked}
-                            >
-                              <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                              {getEligiblePartners(ext.mode, 'new').map(p => (
-                                <option key={p.id} value={p.id}>{p.business_name}</option>
-                              ))}
-                              <option value="Other">Other (Custom Partner)</option>
-                            </select>
+                          {renderCatalogProductPicker(ext, index)}
 
-                            {renderProductPicker(ext, index)}
-
-                            {ext.partner === 'Other' && (
-                              <div className="mt-3 animate-fade-in">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                                  Specify Partner Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={ext.customPartner || ''}
-                                  onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
-                                  disabled={ext.isLocked}
-                                  placeholder="e.g. ABC Fire Refilling Co."
-                                  className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                                />
-                              </div>
-                            )}
-                          </div>
+                          {renderPartnerField(ext, index, ext.mode, ext.validation_mode, ext.productId, { idSuffix: '-refill' })}
 
                           <div className="">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
@@ -3372,45 +3616,7 @@ const VisitForm = () => {
                     <>
                       <div className="col-span-4 space-y-6 animate-fade-in">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-end gap-4">
-                          {/* Partner — chosen first, so System Category/Material can be limited to what's assigned to them */}
-                          <div>
-                            <label
-                              htmlFor={`partner-maint-${index}`}
-                              className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
-                            >
-                              Partner
-                            </label>
-                            <select
-                              id={`partner-maint-${index}`}
-                              value={ext.partner || ''}
-                              onChange={(e) => handlePartnerSelect(index, e.target.value)}
-                              className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                              disabled={loadingPartners || ext.isLocked}
-                            >
-                              <option value="">{loadingPartners ? 'Loading Partners...' : 'Select Partner'}</option>
-                              {getEligiblePartners(ext.mode, null).map(p => (
-                                <option key={p.id} value={p.id}>{p.business_name}</option>
-                              ))}
-                              <option value="Other">Other (Custom Partner)</option>
-                            </select>
-                            {ext.partner === 'Other' && (
-                              <div className="mt-3 animate-fade-in">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                                  Specify Partner Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={ext.customPartner || ''}
-                                  onChange={(e) => handleExtinguisherChange(index, 'customPartner', e.target.value)}
-                                  disabled={ext.isLocked}
-                                  placeholder="e.g. ABC Fire Refilling Co."
-                                  className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : ''}`}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Fire Fighting System Category — limited to categories assigned to the selected Partner */}
+                          {/* System Category — catalog-wide until a real Partner is committed, then scoped to that Partner */}
                           <div>
                             <label
                               htmlFor={`ff-system-maint-${index}`}
@@ -3421,19 +3627,23 @@ const VisitForm = () => {
                             <select
                               id={`ff-system-maint-${index}`}
                               value={ext.firefightingSystem || ''}
-                              onChange={(e) => handleExtinguisherChange(index, 'firefightingSystem', e.target.value)}
+                              onChange={(e) => {
+                                handleExtinguisherChange(index, 'firefightingSystem', e.target.value);
+                                handleExtinguisherChange(index, 'material', '');
+                                handleExtinguisherChange(index, 'productId', '');
+                              }}
                               disabled={ext.isLocked}
                               className={`input-field py-2 text-sm ${ext.isLocked ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                             >
                               <option value="">
-                                {!ext.partner ? 'Select Partner first' : loadingPartnerProducts[ext.partner] ? 'Loading...' : 'Select Category...'}
+                                {isPartnerCatalogScoped(ext.partner) && loadingPartnerProducts[ext.partner] ? 'Loading...' : loadingCatalogProducts ? 'Loading...' : 'Select Category...'}
                               </option>
-                              {getPartnerAssignedCategories(ext.partner).map(sys => (
+                              {getCategoryOptionsFor(ext).map(sys => (
                                 <option key={sys} value={sys}>{sys}</option>
                               ))}
                               <option>Other</option>
                             </select>
-                            {ext.partner && ext.partner !== 'Other' && !loadingPartnerProducts[ext.partner] && getPartnerAssignedCategories(ext.partner).length === 0 && (
+                            {isPartnerCatalogScoped(ext.partner) && !loadingPartnerProducts[ext.partner] && getCategoryOptionsFor(ext).length === 0 && (
                               <p className="text-xs text-amber-700 mt-1.5">No categories assigned to this Partner yet.</p>
                             )}
                             {ext.firefightingSystem === 'Other' && (
@@ -3457,28 +3667,37 @@ const VisitForm = () => {
                               </div>
                             )}
                           </div>
-                          {/* Material */}
+                          {/* Product — catalog-wide until a real Partner is committed, then scoped to that Partner */}
                           <div>
                             <label
                               htmlFor={`material-maint-${index}`}
                               className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block"
                             >
-                              Material
+                              Product
                             </label>
                             <select
                               id={`material-maint-${index}`}
                               value={ext.material || ''}
                               onChange={(e) => {
                                 const mat = e.target.value;
+                                const options = getMaterialOptionsFor(ext, ext.firefightingSystem);
+                                const match = mat !== 'Other' ? options.find(p => p.name === mat) : null;
+                                const newProductId = match ? match.id : '';
                                 handleExtinguisherChange(index, 'material', mat);
                                 handleExtinguisherChange(index, 'unit', getDefaultUnit(mat));
+                                handleExtinguisherChange(index, 'productId', newProductId);
+                                if (ext.partner && ext.partner !== GENERAL_INQUIRY && ext.partner !== 'Other' && (ext.newUnits?.length || 0) === 0) {
+                                  const stillEligible = getEligiblePartnersForProductLocal(newProductId, ext.mode, null)
+                                    .some(p => p.id === ext.partner);
+                                  if (!stillEligible) handleExtinguisherChange(index, 'partner', '');
+                                }
                               }}
                               disabled={ext.isLocked || !ext.firefightingSystem}
                               className={`input-field py-2 text-sm ${ext.isLocked || !ext.firefightingSystem ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white cursor-pointer'}`}
                             >
-                              <option value="">Select Material...</option>
+                              <option value="">Select Product...</option>
                               {ext.firefightingSystem &&
-                                getPartnerAssignedMaterials(ext.partner, ext.firefightingSystem).map(p => (
+                                getMaterialOptionsFor(ext, ext.firefightingSystem).map(p => (
                                   <option key={p.id} value={p.name}>
                                     {p.model_number ? `${p.model_number} — ${p.name}` : p.name}
                                   </option>
@@ -3506,6 +3725,8 @@ const VisitForm = () => {
                               </div>
                             )}
                           </div>
+                          {/* Partner — computed from the Product above (or General Inquiry when none are eligible) */}
+                          {renderPartnerField(ext, index, ext.mode, null, ext.productId, { idSuffix: '-maint' })}
                           {/* Unit */}
                           <div>
                             <label
@@ -3546,8 +3767,8 @@ const VisitForm = () => {
                           <button
                             type="button"
                             onClick={() => addNewUnit(index)}
-                            disabled={!ext.firefightingSystem || !ext.material || (ext.quantity || 0) < 1 || ext.isLocked}
-                            className={`w-full text-xs !h-[50px] py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${(!ext.firefightingSystem || !ext.material || (ext.quantity || 0) < 1)
+                            disabled={!ext.firefightingSystem || !ext.material || !ext.partner || (ext.quantity || 0) < 1 || ext.isLocked}
+                            className={`w-full text-xs !h-[50px] py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${(!ext.firefightingSystem || !ext.material || !ext.partner || (ext.quantity || 0) < 1)
                               ? 'bg-gray-400 cursor-not-allowed text-white'
                               : 'bg-primary-600 hover:bg-primary-700 text-white'
                               }`}

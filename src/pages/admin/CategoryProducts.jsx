@@ -79,10 +79,11 @@ const CategoryProducts = () => {
             const matchesStatus =
                 statusFilter === 'All' ||
                 (statusFilter === 'Active' && p.is_active) ||
-                (statusFilter === 'Inactive' && !p.is_active);
+                (statusFilter === 'Inactive' && !p.is_active) ||
+                (statusFilter === 'Unassigned' && !assignedCounts[p.id]);
             return matchesSearch && matchesStatus;
         });
-    }, [products, search, statusFilter]);
+    }, [products, search, statusFilter, assignedCounts]);
 
     const handleToggleActive = async (product) => {
         setTogglingId(product.id);
@@ -145,7 +146,7 @@ const CategoryProducts = () => {
                     />
                 </div>
                 <div className="flex bg-white border border-slate-200 rounded-2xl p-1 gap-1 shadow-sm overflow-x-auto">
-                    {['All', 'Active', 'Inactive'].map((f) => (
+                    {['All', 'Active', 'Inactive', 'Unassigned'].map((f) => (
                         <button
                             key={f}
                             onClick={() => setStatusFilter(f)}

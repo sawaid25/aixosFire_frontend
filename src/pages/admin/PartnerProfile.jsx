@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
-import { getPartnerChatSettings, updatePartnerChatSettings } from '../../api/admin';
+import { getPartnerChatSettings, updatePartnerChatSettings, updatePartnerServiceAvailability } from '../../api/admin';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PIE_COLORS = ['#10b981','#ef4444','#f59e0b','#3b82f6'];
@@ -31,9 +31,16 @@ const SERVICE_CHECKLIST = [
 ];
 
 // A missing row means enabled — same default the Agent form and the DB trigger use.
+// is_enabled = the Partner's own preference (read-only info here); admin_enabled = the
+// per-partner Admin override this page now controls — independent flags, same row.
 const isServiceEnabled = (rows, type, subtype) => {
     const row = rows.find((r) => r.service_type === type && r.service_subtype === subtype);
     return row ? row.is_enabled : true;
+};
+
+const isAdminEnabledForPartner = (rows, type, subtype) => {
+    const row = rows.find((r) => r.service_type === type && r.service_subtype === subtype);
+    return row ? row.admin_enabled : true;
 };
 
 // Partner Chat Management — the 3 services this feature covers (License Renewal has its
@@ -75,6 +82,7 @@ const PartnerProfile = () => {
     // both enabled (same "missing row = enabled" default used everywhere else).
     const [chatSettings, setChatSettings] = useState({});
     const [chatSavingKey, setChatSavingKey] = useState(null);
+    const [serviceSavingKey, setServiceSavingKey] = useState(null);
     const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
@@ -98,7 +106,7 @@ const PartnerProfile = () => {
                         .eq('partner_id', id)
                         .order('created_at', { ascending: false }),
                     supabase.from('partner_service_availability')
-                        .select('service_type,service_subtype,is_enabled')
+                        .select('service_type,service_subtype,is_enabled,admin_enabled')
                         .eq('partner_id', id),
                     getPartnerChatSettings(id).catch((err) => {
                         console.error('Failed to load chat settings:', err);
@@ -143,6 +151,33 @@ const PartnerProfile = () => {
             toast.error(err?.response?.data?.error || err.message || 'Failed to update chat settings.');
         } finally {
             setChatSavingKey(null);
+        }
+    };
+
+    // Admin Per-Partner Service Control — only ever writes admin_enabled; the Partner's
+    // own is_enabled preference (shown as read-only context below) is never touched here.
+    const handleServiceToggle = async (type, subtype, label, nextValue) => {
+        const key = `${type}::${subtype}`;
+        setServiceSavingKey(key);
+        const prevRows = serviceAvailability;
+        setServiceAvailability((prev) => {
+            const exists = prev.some((r) => r.service_type === type && r.service_subtype === subtype);
+            if (exists) {
+                return prev.map((r) =>
+                    r.service_type === type && r.service_subtype === subtype ? { ...r, admin_enabled: nextValue } : r
+                );
+            }
+            return [...prev, { service_type: type, service_subtype: subtype, is_enabled: true, admin_enabled: nextValue }];
+        });
+        try {
+            await updatePartnerServiceAvailability(id, [{ service_type: type, service_subtype: subtype, admin_enabled: nextValue }]);
+            toast.success(`${label} ${nextValue ? 'enabled' : 'disabled'} for this Partner.`);
+        } catch (err) {
+            console.error('[PartnerProfile] service availability save error:', err);
+            setServiceAvailability(prevRows);
+            toast.error(err?.response?.data?.error || err.message || 'Failed to update service availability.');
+        } finally {
+            setServiceSavingKey(null);
         }
     };
 
@@ -244,21 +279,49 @@ const PartnerProfile = () => {
                 </div>
             </div>
 
-            {/* Services Offered — read-only mirror of the partner's own Manage Services page */}
+            {/* Services Offered — Admin's per-Partner override (admin_enabled). Independent of,
+                and layered on top of, the global switch (/admin/service-manage) and this
+                Partner's own preference (is_enabled, shown below each toggle for context). */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
-                <h3 className="text-sm font-bold text-slate-900 mb-4">Services Offered</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <h3 className="text-sm font-bold text-slate-900 mb-1">Services Offered</h3>
+                <p className="text-xs text-slate-500 mb-4">
+                    Enable or disable each service for this Partner specifically. A service must also be
+                    enabled system-wide, and the Partner must offer it themselves, to be effectively available.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {SERVICE_CHECKLIST.map((svc) => {
-                        const enabled = isServiceEnabled(serviceAvailability, svc.type, svc.subtype);
+                        const key = `${svc.type}::${svc.subtype}`;
+                        const adminEnabled = isAdminEnabledForPartner(serviceAvailability, svc.type, svc.subtype);
+                        const partnerOwn = isServiceEnabled(serviceAvailability, svc.type, svc.subtype);
+                        const saving = serviceSavingKey === key;
                         return (
                             <div
-                                key={`${svc.type}-${svc.subtype}`}
-                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${
-                                    enabled ? 'bg-green-50 text-green-700' : 'bg-slate-50 text-slate-400'
+                                key={key}
+                                className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border ${
+                                    adminEnabled ? 'border-slate-100 bg-slate-50/50' : 'border-red-100 bg-red-50/50'
                                 }`}
                             >
-                                {enabled ? <CheckCircle size={14} className="shrink-0"/> : <XCircle size={14} className="shrink-0"/>}
-                                <span className="truncate">{svc.label}</span>
+                                <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-900 truncate">{svc.label}</p>
+                                    <p className={`text-[10px] font-semibold mt-0.5 flex items-center gap-1 ${
+                                        !adminEnabled ? 'text-red-500' : partnerOwn ? 'text-emerald-600' : 'text-slate-400'
+                                    }`}>
+                                        {!adminEnabled
+                                            ? <><XCircle size={11} /> Disabled by Admin</>
+                                            : partnerOwn
+                                                ? <><CheckCircle size={11} /> Partner has this ON</>
+                                                : 'Partner has this OFF'}
+                                    </p>
+                                </div>
+                                {saving ? (
+                                    <Loader2 size={16} className="animate-spin text-slate-400 shrink-0" />
+                                ) : (
+                                    <ToggleSwitch
+                                        checked={adminEnabled}
+                                        onChange={(next) => handleServiceToggle(svc.type, svc.subtype, svc.label, next)}
+                                        disabled={saving}
+                                    />
+                                )}
                             </div>
                         );
                     })}

@@ -49,6 +49,7 @@ import Operations from './pages/admin/Operations';
 import Reports from './pages/admin/Reports';
 import InquiryList from './pages/admin/InquiryList';
 import InquiryDetail from './pages/admin/InquiryDetail';
+import GeneralInquiries from './pages/admin/GeneralInquiries';
 import InquiryItemDetail from './pages/admin/InquiryItemDetail';
 import QuotationAnalytics from './pages/admin/QuotationAnalytics';
 import AgentPerformance from './pages/perfomance/Dashboard';
@@ -160,6 +161,7 @@ function App() {
                   <Route path="complaints" element={<ComplaintCenter />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="inquiries" element={<InquiryList />} />
+                  <Route path="general-inquiries" element={<GeneralInquiries />} />
                   <Route path="inquiries/:id" element={<InquiryDetail />} />
                   <Route path="inquiries/:id/items/:itemId" element={<InquiryItemDetail />} />
                   <Route path="quotations" element={<QuotationAnalytics />} />

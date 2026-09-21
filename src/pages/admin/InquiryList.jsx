@@ -4,7 +4,7 @@ import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
 import {
     Search, ChevronLeft, ChevronRight, Eye, Filter,
-    Activity, Calendar
+    Activity, Calendar, Inbox
 } from 'lucide-react';
 
 const SERVICE_TYPES = ['All', 'inspection', 'refilling', 'installation', 'validation', 'maintenance'];
@@ -33,6 +33,7 @@ const InquiryList = () => {
         normalizeStatus(new URLSearchParams(window.location.search).get('status'))
     );
     const [typeFilter, setType]       = useState('All');
+    const [generalOnly, setGeneralOnly] = useState(false);
     const [page, setPage]             = useState(0);
     const [total, setTotal]           = useState(0);
 
@@ -52,12 +53,13 @@ const InquiryList = () => {
             let q = supabase
                 .from('inquiries')
                 .select(
-                    'id,inquiry_no,type,status,priority,created_at,follow_up_date,customer_id,agent_id,customers(business_name),agents(name)'
+                    'id,inquiry_no,type,status,priority,created_at,follow_up_date,customer_id,agent_id,partner_id,is_general_inquiry,customers(business_name),agents(name)'
                 )
                 .order('created_at', { ascending: false });
 
             if (typeFilter !== 'All') q = q.ilike('type', typeFilter);
             if (search.trim())        q = q.ilike('inquiry_no', `%${search.trim()}%`);
+            if (generalOnly)          q = q.eq('is_general_inquiry', true);
 
             const { data, error } = await q;
             if (error) throw error;
@@ -75,12 +77,12 @@ const InquiryList = () => {
         } finally {
             setLoading(false);
         }
-    }, [search, statusFilter, typeFilter, page]);
+    }, [search, statusFilter, typeFilter, generalOnly, page]);
 
     useEffect(() => { fetch(); }, [fetch]);
 
     // Reset to page 0 when filters change
-    useEffect(() => { setPage(0); }, [search, statusFilter, typeFilter]);
+    useEffect(() => { setPage(0); }, [search, statusFilter, typeFilter, generalOnly]);
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -140,6 +142,19 @@ const InquiryList = () => {
                         ))}
                     </select>
                 </div>
+
+                {/* General Inquiry filter — no Partner offered the product/service the Agent picked */}
+                <button
+                    type="button"
+                    onClick={() => setGeneralOnly((v) => !v)}
+                    className={`flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border transition-colors ${
+                        generalOnly
+                            ? 'bg-amber-500 border-amber-500 text-white'
+                            : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                >
+                    <Inbox size={14} /> General Only
+                </button>
             </div>
 
             {/* Table */}
@@ -209,6 +224,11 @@ const InquiryList = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="text-sm text-slate-600 capitalize">{inq.type || '—'}</span>
+                                                {inq.is_general_inquiry && (
+                                                    <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700">
+                                                        <Inbox size={10} /> General
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${getBadgeClass(inq.status)}`}>

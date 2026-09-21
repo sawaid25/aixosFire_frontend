@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, MessageSquare, Clock, Check, Trash2, AlertTriangle, FileText, Package } from 'lucide-react';
+import { Bell, MessageSquare, Clock, Check, Trash2, AlertTriangle, FileText, Package, Inbox } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { fetchCustomerInquiries, fetchCustomerQuotations } from '../api/customerPortal';
@@ -35,6 +35,9 @@ const deriveNotificationDisplay = (n, fallbackTitle) => {
     }
     if (n.type === 'quotation' || n.type === 'quotation_update') {
         return { title: n.title || (n.type === 'quotation' ? 'New Quotation' : 'Quotation Update'), type: n.type };
+    }
+    if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') {
+        return { title: n.title || (n.type === 'general_inquiry' ? 'New General Inquiry' : 'New Inquiry Assigned'), type: n.type };
     }
     return { title: fallbackTitle, type: 'message' };
 };
@@ -551,6 +554,16 @@ const NotificationBell = ({ onOpenChat }) => {
             setIsOpen(false);
             return;
         }
+        if (notification.type === 'general_inquiry' && notification.relatedId) {
+            navigate(`/admin/inquiries/${notification.relatedId}`);
+            setIsOpen(false);
+            return;
+        }
+        if (notification.type === 'general_inquiry_assigned' && notification.relatedId) {
+            navigate(`/partner/inquiry/${notification.relatedId}`);
+            setIsOpen(false);
+            return;
+        }
         if (typeof notification.type === 'string' && notification.type.startsWith('renewal_') && notification.relatedId) {
             const role = (user?.role || '').toLowerCase();
             if (role === 'partner') {
@@ -584,6 +597,7 @@ const NotificationBell = ({ onOpenChat }) => {
         if (n.type === 'product_assigned') return <Package size={18} className="text-teal-600" />;
         if (n.type === 'message') return <MessageSquare size={18} className="text-blue-600" />;
         if (n.type === 'agent_complaint') return <MessageSquare size={18} className="text-orange-600" />;
+        if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') return <Inbox size={18} className="text-amber-600" />;
         return <Clock size={18} className="text-amber-600" />;
     };
 
@@ -594,6 +608,7 @@ const NotificationBell = ({ onOpenChat }) => {
         if (n.type === 'product_assigned') return 'bg-teal-100 text-teal-700';
         if (n.type === 'message') return 'bg-blue-100 text-blue-600';
         if (n.type === 'agent_complaint') return 'bg-orange-100 text-orange-600';
+        if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') return 'bg-amber-100 text-amber-700';
         return 'bg-slate-100 text-slate-600';
     };
 

@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, RefreshCw, Package, Wrench, CheckCircle2, SlidersHorizontal, Loader2, Users } from 'lucide-react';
+import { ShieldCheck, RefreshCw, Package, Wrench, CheckCircle2, SlidersHorizontal, Loader2, Users, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PageLoader from '../../components/PageLoader';
 import { supabase } from '../../supabaseClient';
-import { getGlobalServiceAvailability, updateGlobalServiceAvailability } from '../../api/admin';
+import {
+  getGlobalServiceAvailability, updateGlobalServiceAvailability,
+  getGeneralInquiryAdmins, updateGeneralInquiryAdmins,
+} from '../../api/admin';
 
 /**
  * Admin-level master switch per (service_type, service_subtype) — ANDed with each
@@ -119,15 +122,20 @@ const ServiceManage = () => {
   // read-only informational context, not a write path.
   const [totalPartners, setTotalPartners] = useState(0);
   const [disabledCounts, setDisabledCounts] = useState({});
+  // General Inquiry routing — which Admin(s) get notified when an Agent creates a
+  // General Inquiry (no Partner offers the selected product/service).
+  const [generalInquiryAdmins, setGeneralInquiryAdmins] = useState([]);
+  const [savingAdminId, setSavingAdminId] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [rows, partnerCountRes, disabledRes] = await Promise.all([
+      const [rows, partnerCountRes, disabledRes, admins] = await Promise.all([
         getGlobalServiceAvailability(),
         supabase.from('partners').select('id', { count: 'exact', head: true }).eq('status', 'Active'),
         supabase.from('partner_service_availability').select('service_type, service_subtype').eq('is_enabled', false),
+        getGeneralInquiryAdmins(),
       ]);
 
       const map = {};
@@ -143,6 +151,7 @@ const ServiceManage = () => {
         counts[key] = (counts[key] || 0) + 1;
       });
       setDisabledCounts(counts);
+      setGeneralInquiryAdmins(admins || []);
     } catch (err) {
       console.error('[ServiceManage] load error:', err);
       setError('Could not load service settings. Please try again.');
@@ -179,6 +188,23 @@ const ServiceManage = () => {
       toast.error(err?.response?.data?.error || err.message || `Failed to update ${label}.`);
     } finally {
       setSavingKey(null);
+    }
+  };
+
+  const handleAdminRoutingToggle = async (adminId, label, nextValue) => {
+    setSavingAdminId(adminId);
+    const prev = generalInquiryAdmins;
+    setGeneralInquiryAdmins((list) => list.map((a) => (a.id === adminId ? { ...a, receives_general_inquiries: nextValue } : a)));
+    try {
+      const updated = await updateGeneralInquiryAdmins([{ admin_id: adminId, receives_general_inquiries: nextValue }]);
+      setGeneralInquiryAdmins(updated || []);
+      toast.success(`${label} ${nextValue ? 'will now receive' : 'will no longer receive'} General Inquiries.`);
+    } catch (err) {
+      console.error('[ServiceManage] general inquiry routing save error:', err);
+      setGeneralInquiryAdmins(prev);
+      toast.error(err?.response?.data?.error || err.message || 'Failed to update General Inquiry routing.');
+    } finally {
+      setSavingAdminId(null);
     }
   };
 
@@ -241,6 +267,45 @@ const ServiceManage = () => {
               </div>
             );
           })}
+
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
+            <div className="p-6 md:p-8 border-b border-slate-50 flex items-center gap-3">
+              <div className="p-2.5 bg-primary-500/10 rounded-xl text-primary-600 shrink-0">
+                <Inbox size={22} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">General Inquiry Routing</h2>
+                <p className="text-xs text-slate-500">
+                  When an Agent picks a product no Partner currently offers, they create a General
+                  Inquiry instead. Admins with this on get notified. If none are selected, every
+                  Admin receives it.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 md:px-8">
+              {generalInquiryAdmins.length === 0 ? (
+                <p className="text-sm text-slate-400 py-4 text-center">No Admin accounts found.</p>
+              ) : (
+                generalInquiryAdmins.map((admin) => (
+                  <div key={admin.id} className="flex items-center justify-between gap-4 py-4 border-b border-slate-50 last:border-b-0">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm truncate">{admin.name || admin.email}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">{admin.email}</p>
+                    </div>
+                    {savingAdminId === admin.id ? (
+                      <Loader2 size={18} className="animate-spin text-slate-400 shrink-0" />
+                    ) : (
+                      <ToggleSwitch
+                        checked={Boolean(admin.receives_general_inquiries)}
+                        onChange={(next) => handleAdminRoutingToggle(admin.id, admin.name || admin.email, next)}
+                        disabled={savingAdminId === admin.id}
+                      />
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

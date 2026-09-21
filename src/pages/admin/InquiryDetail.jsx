@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
+import { assignInquiryPartner } from '../../api/admin';
 import {
     ArrowLeft, FileText, User, Briefcase, Handshake,
     Calendar, CheckCircle, Clock, XCircle, Activity,
     MapPin, Mail, Phone, DollarSign, Tag, AlertCircle,
     QrCode, Package, ChevronRight, Hash,
-    AlertTriangle, TrendingUp, TrendingDown, Target, Timer, Eye, X
+    AlertTriangle, TrendingUp, TrendingDown, Target, Timer, Eye, X, Loader2, Inbox
 } from 'lucide-react';
 
 const SERVICE_PRICING = {
@@ -316,6 +318,9 @@ const InquiryDetail = () => {
     const [inquiry, setInquiry]       = useState(null);
     const [items, setItems]           = useState([]);
     const [selectedItem, setSelectedItem] = useState(null);
+    // General Inquiry manual assignment — Partners eligible for this inquiry's product(s)
+    // + service, computed the same way the Agent form does (see productPartnerEligibility).
+    const [assignOptions, setAssignOptions] = useState({ loading: false, partners: [], selected: '', saving: false });
 
     useEffect(() => {
         const load = async () => {
@@ -362,6 +367,53 @@ const InquiryDetail = () => {
         };
         load();
     }, [id]);
+
+    // Only relevant for an unassigned General Inquiry. This is a manual Admin routing
+    // decision, not the Agent's automatic product/service matching — so every Active
+    // Partner is offered here, not just ones that already carry the requested product.
+    // Inactive/deleted Partners are still excluded (status filter below); the backend
+    // (PUT /admin/inquiries/:id/assign-partner) re-enforces the Active check and
+    // admin-only authorization regardless of what this list shows.
+    useEffect(() => {
+        if (!inquiry?.is_general_inquiry || inquiry?.partner_id) return;
+        let cancelled = false;
+
+        const loadPartners = async () => {
+            setAssignOptions((s) => ({ ...s, loading: true }));
+            try {
+                const { data: partners, error } = await supabase
+                    .from('partners')
+                    .select('id, business_name')
+                    .eq('status', 'Active')
+                    .order('business_name', { ascending: true });
+                if (error) throw error;
+
+                if (!cancelled) setAssignOptions({ loading: false, partners: partners || [], selected: '', saving: false });
+            } catch (err) {
+                console.error('[InquiryDetail] load partners failed:', err);
+                if (!cancelled) setAssignOptions((s) => ({ ...s, loading: false }));
+            }
+        };
+
+        loadPartners();
+        return () => { cancelled = true; };
+    }, [inquiry?.is_general_inquiry, inquiry?.partner_id]);
+
+    const handleAssignPartner = async () => {
+        if (!assignOptions.selected) return;
+        setAssignOptions((s) => ({ ...s, saving: true }));
+        try {
+            await assignInquiryPartner(inquiry.id, assignOptions.selected);
+            const { data: partnerData } = await supabase.from('partners').select('*').eq('id', assignOptions.selected).maybeSingle();
+            setInquiry((prev) => ({ ...prev, partner_id: assignOptions.selected, partners: partnerData || null }));
+            toast.success('Partner assigned to this inquiry.');
+        } catch (err) {
+            console.error('[InquiryDetail] assign partner failed:', err);
+            toast.error(err?.response?.data?.error || err.message || 'Failed to assign partner.');
+        } finally {
+            setAssignOptions((s) => ({ ...s, saving: false }));
+        }
+    };
 
     const estimatedRevenue = useMemo(() => {
         if (!inquiry) return 0;
@@ -528,6 +580,47 @@ const InquiryDetail = () => {
                             <InfoRow icon={Handshake} label="Partner Name" value={inquiry.partners.name} />
                             <InfoRow icon={Mail}      label="Email"        value={inquiry.partners.email} />
                             <InfoRow icon={Phone}     label="Phone"        value={inquiry.partners.phone} />
+                        </div>
+                    ) : inquiry.is_general_inquiry ? (
+                        <div className="py-2">
+                            <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
+                                <Inbox size={16} className="text-amber-600 shrink-0" />
+                                <p className="text-xs font-bold text-amber-800">
+                                    General Inquiry — no Partner offered this product/service. Needs assignment.
+                                </p>
+                            </div>
+                            {assignOptions.loading ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <Loader2 size={18} className="animate-spin text-slate-400" />
+                                </div>
+                            ) : assignOptions.partners.length === 0 ? (
+                                <p className="text-sm text-slate-400 py-4 text-center">
+                                    No Active Partners are available to assign.
+                                </p>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    <select
+                                        value={assignOptions.selected}
+                                        onChange={(e) => setAssignOptions((s) => ({ ...s, selected: e.target.value }))}
+                                        className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                                        disabled={assignOptions.saving}
+                                    >
+                                        <option value="">Select a Partner…</option>
+                                        {assignOptions.partners.map((p) => (
+                                            <option key={p.id} value={p.id}>{p.business_name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={handleAssignPartner}
+                                        disabled={!assignOptions.selected || assignOptions.saving}
+                                        className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+                                    >
+                                        {assignOptions.saving ? <Loader2 size={15} className="animate-spin" /> : <Handshake size={15} />}
+                                        Assign Partner
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-8 text-slate-300">

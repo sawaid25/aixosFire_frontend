@@ -104,9 +104,12 @@ const ManageServices = () => {
   // Map of `${type}::${subtype}` -> boolean, only for combos with an explicit row.
   // A missing key means enabled — same default used by the Agent form / DB trigger.
   const [availability, setAvailability] = useState({});
-  // Admin-level global switch — read-only here (partners cannot write this table; RLS
-  // blocks it, see the migration). A missing key defaults to enabled, same as above.
+  // Admin-level global switch (same setting for every partner) — read-only here.
   const [globalAvailability, setGlobalAvailability] = useState({});
+  // Admin-level PER-PARTNER override (admin_enabled on this partner's own rows) — also
+  // read-only; a separate, more granular layer on top of the global one above. Either
+  // one being off locks the toggle the same way from this Partner's point of view.
+  const [adminOverride, setAdminOverride] = useState({});
   const [savingKey, setSavingKey] = useState(null);
 
   const load = async () => {
@@ -118,10 +121,14 @@ const ManageServices = () => {
         supabase.from('service_availability').select('service_type, service_subtype, is_enabled'),
       ]);
       const map = {};
+      const overrideMap = {};
       (rows || []).forEach((row) => {
-        map[keyFor(row.service_type, row.service_subtype)] = row.is_enabled;
+        const key = keyFor(row.service_type, row.service_subtype);
+        map[key] = row.is_enabled;
+        overrideMap[key] = row.admin_enabled;
       });
       setAvailability(map);
+      setAdminOverride(overrideMap);
 
       const globalMap = {};
       (globalRes?.data || []).forEach((row) => {
@@ -147,8 +154,10 @@ const ManageServices = () => {
 
   const isGloballyEnabled = useMemo(() => (type, subtype) => {
     const key = keyFor(type, subtype);
-    return key in globalAvailability ? globalAvailability[key] : true;
-  }, [globalAvailability]);
+    const globalOk = key in globalAvailability ? globalAvailability[key] : true;
+    const perPartnerOk = key in adminOverride ? adminOverride[key] : true;
+    return globalOk && perPartnerOk;
+  }, [globalAvailability, adminOverride]);
 
   const handleToggle = async (type, subtype, label, nextValue) => {
     if (!isGloballyEnabled(type, subtype)) return; // can't bypass the Admin restriction
