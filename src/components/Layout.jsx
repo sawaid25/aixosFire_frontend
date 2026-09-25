@@ -50,7 +50,7 @@ const ImpersonationBanner = ({ impersonation, onReturnToAdmin }) => {
 };
 
 const Layout = ({ children }) => {
-    const { user, logout, impersonation, endImpersonation } = useAuth();
+    const { user, logout, impersonation, endImpersonation, loading } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [isChatOpen, setIsChatOpen] = React.useState(false);
@@ -84,6 +84,15 @@ const Layout = ({ children }) => {
         setSelectedChatContext(context);
         setIsChatOpen(true);
     };
+
+    // Same role-resolution the nav-items logic below already uses (user.role, falling
+    // back to the persisted role while auth is settling) — reused here, not recomputed.
+    const role = user?.role || localStorage.getItem('role');
+    // Partners have no `name` column (see backend/routes/auth.js's partners table
+    // insert) — their identity lives in business_name/owner_name instead. Falls back
+    // the same progressive way the rest of the app already does when a field is
+    // missing, ending on the role label rather than a hardcoded string.
+    const partnerDisplayName = user?.name || user?.business_name || user?.owner_name || 'Partner';
 
     // Define navigation items based on role
     const getNavItems = () => {
@@ -168,13 +177,24 @@ const Layout = ({ children }) => {
                             AiXOS Red<span className="text-primary-500">.</span>
                         </h1>
                     </div>
-                    <button 
+                    <button
                         onClick={() => setIsMobileMenuOpen(false)}
                         className="p-2 text-slate-400 hover:text-white transition-colors"
                     >
                         <X size={20} />
                     </button>
                 </div>
+
+                {role === 'partner' && (
+                    <div className="px-6 pt-4 pb-1 relative z-10">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Partner</p>
+                        {loading ? (
+                            <div className="h-4 w-32 bg-slate-800 rounded animate-pulse" />
+                        ) : (
+                            <p className="text-sm font-bold text-white truncate">{partnerDisplayName}</p>
+                        )}
+                    </div>
+                )}
 
                 <nav className="flex-1 px-4 pt-6 overflow-y-auto custom-scrollbar">
                     {(() => {
@@ -243,6 +263,16 @@ const Layout = ({ children }) => {
                             AiXOS Red<span className="text-primary-500">.</span>
                         </h1>
                     </div>
+                    {role === 'partner' && (
+                        <div className="mt-4">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Partner</p>
+                            {loading ? (
+                                <div className="h-5 w-36 bg-slate-800 rounded animate-pulse" />
+                            ) : (
+                                <p className="text-base font-bold text-white truncate">{partnerDisplayName}</p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <nav className="flex-1 px-4 pt-4 overflow-y-auto custom-scrollbar">

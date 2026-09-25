@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
 import { assignInquiryPartner } from '../../api/admin';
+import { subtypeOnlyLabel } from '../../utils/productPartnerEligibility';
 import {
     ArrowLeft, FileText, User, Briefcase, Handshake,
     Calendar, CheckCircle, Clock, XCircle, Activity,
@@ -586,7 +587,7 @@ const InquiryDetail = () => {
                             <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
                                 <Inbox size={16} className="text-amber-600 shrink-0" />
                                 <p className="text-xs font-bold text-amber-800">
-                                    General Inquiry — no Partner offered this product/service. Needs assignment.
+                                    General Inquiry{subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode) ? ` (${inquiry.type} - ${subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode)})` : ''} — no Partner assigned yet. Needs assignment.
                                 </p>
                             </div>
                             {assignOptions.loading ? (

@@ -100,3 +100,8 @@ export const assignInquiryPartner = async (inquiryId, partnerId) => {
         throw error;
     }
 };
+
+
+// followup, license renewal, refill in sab ki inquiry ma bhi general inquiry banane ka option ayga 
+// partner dashboard pr top pr partner ka naam ayega 
+// agenr inquiry create kr time product detail ka option ayega aur Type aur kg ki input remove hogi

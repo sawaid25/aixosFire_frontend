@@ -58,3 +58,23 @@ export function buildPartnerProductsMap(rows) {
   });
   return map;
 }
+
+/** Human labels for Validation/Refill sub-types — same wording VisitForm.jsx's own
+ * submode tabs use ('New Validation'/'New Refill'/'Follow-up'/'License Renewal'), kept
+ * here so General Inquiry notifications/lists describe the inquiry the same way the
+ * Agent form does. New Unit/Maintenance have no real sub-type. */
+const SUBTYPE_DISPLAY_LABELS = {
+  Validation: { new: 'New Validation', followup: 'Follow-up', 'license-renewal': 'License Renewal' },
+  Refill: { new: 'New Refill', followup: 'Follow-up', 'license-renewal': 'License Renewal' },
+};
+
+/** e.g. subtypeOnlyLabel('Validation', 'followup') -> 'Follow-up'; null for New Unit/Maintenance. */
+export function subtypeOnlyLabel(type, validationMode) {
+  return SUBTYPE_DISPLAY_LABELS[type]?.[validationMode || 'new'] || null;
+}
+
+/** e.g. inquiryTypeLabel('Validation', 'followup') -> 'Validation - Follow-up'; 'New Unit' unchanged. */
+export function inquiryTypeLabel(type, validationMode) {
+  const sub = subtypeOnlyLabel(type, validationMode);
+  return sub ? `${type} - ${sub}` : type;
+}

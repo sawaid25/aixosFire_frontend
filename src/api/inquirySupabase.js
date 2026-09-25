@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { inquiryTypeLabel } from '../utils/productPartnerEligibility';
 
 function throwReadableDbError(err, context) {
   const detail = err?.message || err?.details || err?.hint || err?.code || 'Unknown database error';
@@ -353,13 +354,14 @@ export async function createInquiryViaSupabase(inquiryData, items) {
       ]);
       const customerName = customerRow?.business_name || 'a customer';
       const agentName = agentRow?.name || 'An Agent';
+      const typeLabel = inquiryTypeLabel(inquiryData.type, itemsArr[0]?.validation_mode);
 
       const rows = (recipientIds || []).map((row) => ({
         sender_id: inquiryData.agent_id ? String(inquiryData.agent_id) : null,
         sender_role: 'Agent',
         recipient_id: String(row.id),
         recipient_role: 'Admin',
-        message: `Agent ${agentName} created a General Inquiry for ${customerName} (${inquiryData.type}). No Partner was available — please review and assign one.`,
+        message: `Agent ${agentName} created a General Inquiry for ${typeLabel} (Customer: ${customerName}). No Partner is assigned — please review and assign one.`,
         inquiry_id: inquiryId,
         type: 'general_inquiry',
         title: 'New General Inquiry',

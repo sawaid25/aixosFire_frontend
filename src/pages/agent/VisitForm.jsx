@@ -11,8 +11,9 @@ import {
   Plus, Trash, Save, ArrowLeft, Building, FireExtinguisher, FileText,
   Search, Check, AlertTriangle, ArrowRight, UserPlus, MapPin, Camera, Image, Mic, Square,
   Pencil, History, Calendar, ScanLine, CheckCircle2, XCircle,
-  X, RefreshCw, Smartphone
+  X, RefreshCw, Smartphone, Info
 } from 'lucide-react';
+import ProductDetailsModal from '../../components/products/ProductDetailsModal';
 import client from '../../api/client';
 import { useRef } from 'react';
 import imageCompression from 'browser-image-compression';
@@ -176,6 +177,9 @@ const VisitForm = () => {
   // product_id -> Set<partner_id>, built from a full partner_products read — lets
   // "which Partners have this product assigned" be answered client-side instantly.
   const [productPartnersMap, setProductPartnersMap] = useState(new Map());
+  // "View Details" popup for whichever Product is currently selected in a block —
+  // read-only, opening/closing it never changes the actual selection.
+  const [productDetailsModal, setProductDetailsModal] = useState({ isOpen: false, product: null });
   const debounceTimers = useRef([]);
   const searchDebounceRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -236,7 +240,7 @@ const VisitForm = () => {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('id, name, model_number, description, image_url, is_active, categories(name)')
+          .select('id, name, model_number, description, specifications, image_url, is_active, categories(name)')
           .eq('is_active', true);
         if (error) throw error;
         const products = (data || []).map(p => ({ ...p, category: p.categories?.name || 'Other' }));
@@ -320,12 +324,12 @@ const VisitForm = () => {
   }, [isSubmodeGloballyAvailable]);
 
   const fetchPartnerProducts = async (partnerId) => {
-    if (!partnerId || partnerId === 'Other' || partnerProductsCache[partnerId]) return;
+    if (!partnerId || partnerId === 'Other' || partnerId === GENERAL_INQUIRY || partnerProductsCache[partnerId]) return;
     setLoadingPartnerProducts(prev => ({ ...prev, [partnerId]: true }));
     try {
       const { data, error } = await supabase
         .from('partner_products')
-        .select('product_id, products!inner(id, name, model_number, description, image_url, is_active, categories(name))')
+        .select('product_id, products!inner(id, name, model_number, description, specifications, image_url, is_active, categories(name))')
         .eq('partner_id', partnerId)
         .eq('products.is_active', true);
       if (error) throw error;
@@ -381,6 +385,18 @@ const VisitForm = () => {
 
   const getMaterialOptionsFor = (ext, category) =>
     isPartnerCatalogScoped(ext.partner) ? getPartnerAssignedMaterials(ext.partner, category) : getCatalogMaterials(category);
+
+  /** Opens the read-only Product Details modal — never changes the current selection. */
+  const openProductDetails = (product) => {
+    if (product) setProductDetailsModal({ isOpen: true, product });
+  };
+
+  /** Resolves the full Product record currently selected in a New Unit / Maintenance
+   * block, from whichever list (catalog-wide or this Partner's own) is active for it. */
+  const getSelectedProductForBlock = (ext) => {
+    const list = isPartnerCatalogScoped(ext.partner) ? (partnerProductsCache[ext.partner] || []) : catalogProducts;
+    return list.find((p) => p.id === ext.productId) || null;
+  };
 
   /** Partners eligible for a given Product + this block's mode/sub-type — the core
    * "Product assigned to Partner AND Partner offers this service" rule from the shared
@@ -523,6 +539,7 @@ const VisitForm = () => {
           {eligible.map((p) => (
             <option key={p.id} value={p.id}>{p.business_name}</option>
           ))}
+          <option value={GENERAL_INQUIRY}>General Inquiry (No Partner — notify Admin)</option>
           <option value="Other">Other (Custom Partner)</option>
         </select>
       </div>
@@ -578,8 +595,19 @@ const VisitForm = () => {
                 </optgroup>
               ))}
             </select>
-            {selected?.description && (
-              <p className="text-xs text-slate-400 mt-1.5">{selected.description}</p>
+            {selected && (
+              <div className="flex items-start justify-between gap-2 mt-1.5">
+                {selected.description ? (
+                  <p className="text-xs text-slate-400">{selected.description}</p>
+                ) : <span />}
+                <button
+                  type="button"
+                  onClick={() => openProductDetails(selected)}
+                  className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
+                >
+                  <Info size={12} /> View Details
+                </button>
+              </div>
             )}
           </>
         )}
@@ -588,7 +616,7 @@ const VisitForm = () => {
   };
 
   const renderProductPicker = (ext, index) => {
-    if (!ext.partner || ext.partner === 'Other') return null;
+    if (!ext.partner || ext.partner === 'Other' || ext.partner === GENERAL_INQUIRY) return null;
     const isLoading = Boolean(loadingPartnerProducts[ext.partner]);
     const products = partnerProductsCache[ext.partner] || [];
     const selected = products.find(p => p.id === ext.productId);
@@ -638,8 +666,19 @@ const VisitForm = () => {
                 </optgroup>
               ))}
             </select>
-            {selected?.description && (
-              <p className="text-xs text-slate-400 mt-1.5">{selected.description}</p>
+            {selected && (
+              <div className="flex items-start justify-between gap-2 mt-1.5">
+                {selected.description ? (
+                  <p className="text-xs text-slate-400">{selected.description}</p>
+                ) : <span />}
+                <button
+                  type="button"
+                  onClick={() => openProductDetails(selected)}
+                  className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
+                >
+                  <Info size={12} /> View Details
+                </button>
+              </div>
             )}
           </>
         )}
@@ -670,6 +709,7 @@ const VisitForm = () => {
           {getEligiblePartners(ext.mode, 'license-renewal').map(p => (
             <option key={p.id} value={p.id}>{p.business_name}</option>
           ))}
+          <option value={GENERAL_INQUIRY}>General Inquiry (No Partner — notify Admin)</option>
           <option value="Other">Other (Custom Partner)</option>
         </select>
         {ext.partner === 'Other' && (
@@ -3136,6 +3176,7 @@ const VisitForm = () => {
                               {getEligiblePartners(ext.mode, 'new').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
+                              <option value={GENERAL_INQUIRY}>General Inquiry (No Partner — notify Admin)</option>
                             </select>
                           </div>
 
@@ -3205,6 +3246,7 @@ const VisitForm = () => {
                               {getEligiblePartners(ext.mode, 'followup').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
+                              <option value={GENERAL_INQUIRY}>General Inquiry (No Partner — notify Admin)</option>
                             </select>
                           </div>
 
@@ -3314,6 +3356,15 @@ const VisitForm = () => {
                               ))}
                             <option>Other</option>
                           </select>
+                          {ext.productId && (
+                            <button
+                              type="button"
+                              onClick={() => openProductDetails(getSelectedProductForBlock(ext))}
+                              className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
+                            >
+                              <Info size={12} /> View Details
+                            </button>
+                          )}
                           {ext.material === 'Other' && (
                             <div className="mt-3 animate-fade-in">
                               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">
@@ -3583,6 +3634,7 @@ const VisitForm = () => {
                               {getEligiblePartners(ext.mode, 'followup').map(p => (
                                 <option key={p.id} value={p.id}>{p.business_name}</option>
                               ))}
+                              <option value={GENERAL_INQUIRY}>General Inquiry (No Partner — notify Admin)</option>
                             </select>
                           </div>
 
@@ -3704,6 +3756,15 @@ const VisitForm = () => {
                                 ))}
                               <option>Other</option>
                             </select>
+                            {ext.productId && (
+                              <button
+                                type="button"
+                                onClick={() => openProductDetails(getSelectedProductForBlock(ext))}
+                                className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
+                              >
+                                <Info size={12} /> View Details
+                              </button>
+                            )}
                             {ext.material === 'Other' && (
                               <div className="mt-3 animate-fade-in">
                                 <label
@@ -4252,6 +4313,11 @@ const VisitForm = () => {
         onClose={() => setIsHistoryModalOpen(false)}
         customerId={formData.customerId}
         customerName={formData.businessName}
+      />
+      <ProductDetailsModal
+        isOpen={productDetailsModal.isOpen}
+        onClose={() => setProductDetailsModal({ isOpen: false, product: null })}
+        product={productDetailsModal.product}
       />
     </div>
   );
