@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { subtypeOnlyLabel } from '../../utils/productPartnerEligibility';
 import { Inbox, Eye, Calendar, RefreshCw, Search, Filter } from 'lucide-react';
@@ -8,6 +8,13 @@ const TYPE_OPTIONS = ['All', 'Validation', 'Refill', 'New Unit', 'Maintenance'];
 const SUBTYPE_OPTIONS = ['All', 'new', 'followup', 'license-renewal'];
 const SUBTYPE_FILTER_LABELS = { new: 'New', followup: 'Follow-up', 'license-renewal': 'License Renewal' };
 const STATUS_OPTIONS = ['All', 'pending', 'accepted', 'in progress', 'scheduled', 'completed', 'rejected', 'cancelled'];
+// Who raised it: a customer's own request (performed_by 'Customer') or an Agent visit.
+const SOURCE_OPTIONS = [
+    { value: 'all', label: 'All Sources' },
+    { value: 'customer', label: 'Customer requests' },
+    { value: 'agent', label: 'Agent-created' },
+];
+const isCustomerSource = (inq) => String(inq.performed_by || '').toLowerCase() === 'customer';
 
 /**
  * Admin's queue of General Inquiries — created by an Agent for ANY inquiry type/subtype
@@ -28,6 +35,15 @@ const GeneralInquiries = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState('All');
+    // ?source=customer (e.g. from the Admin bell / dashboard) pre-selects customer requests.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const sourceFilter = ['customer', 'agent'].includes(searchParams.get('source')) ? searchParams.get('source') : 'all';
+    const setSourceFilter = (value) => {
+        const next = new URLSearchParams(searchParams);
+        if (value === 'all') next.delete('source');
+        else next.set('source', value);
+        setSearchParams(next, { replace: true });
+    };
     const [subtypeFilter, setSubtypeFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [dateFrom, setDateFrom] = useState('');
@@ -39,7 +55,7 @@ const GeneralInquiries = () => {
             const { data, error } = await supabase
                 .from('inquiries')
                 .select(
-                    'id,inquiry_no,type,status,created_at,customer_id,agent_id,customers(business_name),agents(name),inquiry_items(validation_mode,product_id,products(name,model_number))'
+                    'id,inquiry_no,type,status,created_at,customer_id,agent_id,performed_by,customers(business_name),agents(name),inquiry_items(validation_mode,product_id,products(name,model_number))'
                 )
                 .eq('is_general_inquiry', true)
                 .is('partner_id', null)
@@ -74,14 +90,15 @@ const GeneralInquiries = () => {
                 (inq.customers?.business_name || '').toLowerCase().includes(q) ||
                 (inq.agents?.name || '').toLowerCase().includes(q);
             const matchesType = typeFilter === 'All' || inq.type === typeFilter;
+            const matchesSource = sourceFilter === 'all' || (sourceFilter === 'customer') === isCustomerSource(inq);
             const matchesSubtype = subtypeFilter === 'All' || subtypeOf(inq) === subtypeFilter;
             const matchesStatus = statusFilter === 'All' || (inq.status || '').toLowerCase() === statusFilter;
             const created = inq.created_at ? new Date(inq.created_at) : null;
             const matchesFrom = !dateFrom || (created && created >= new Date(dateFrom));
             const matchesTo = !dateTo || (created && created <= new Date(`${dateTo}T23:59:59`));
-            return matchesSearch && matchesType && matchesSubtype && matchesStatus && matchesFrom && matchesTo;
+            return matchesSearch && matchesSource && matchesType && matchesSubtype && matchesStatus && matchesFrom && matchesTo;
         });
-    }, [rows, search, typeFilter, subtypeFilter, statusFilter, dateFrom, dateTo]);
+    }, [rows, search, sourceFilter, typeFilter, subtypeFilter, statusFilter, dateFrom, dateTo]);
 
     return (
         <div className="space-y-6">
@@ -116,6 +133,13 @@ const GeneralInquiries = () => {
                         className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                 </div>
+                <select
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                >
+                    {SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
                 <div className="flex items-center gap-2">
                     <Filter size={14} className="text-slate-400 shrink-0" />
                     <select
@@ -197,6 +221,11 @@ const GeneralInquiries = () => {
                                             >
                                                 {inq.inquiry_no || `#${inq.id?.toString().slice(-6)}`}
                                             </Link>
+                                            {String(inq.performed_by || '').toLowerCase() === 'customer' && (
+                                                <span className="block mt-1 w-fit px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 text-[10px] font-bold uppercase tracking-wider">
+                                                    Customer request
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="text-sm text-slate-600">{inq.type || '—'}</span>

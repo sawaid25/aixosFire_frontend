@@ -75,6 +75,7 @@ const CategoryProducts = () => {
             const matchesSearch =
                 (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
                 (p.model_number || '').toLowerCase().includes(search.toLowerCase()) ||
+                (p.cat_no || '').toLowerCase().includes(search.toLowerCase()) ||
                 (p.description || '').toLowerCase().includes(search.toLowerCase());
             const matchesStatus =
                 statusFilter === 'All' ||
@@ -141,7 +142,7 @@ const CategoryProducts = () => {
                     <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search products or model numbers..."
+                        placeholder="Search products, CAT No or model numbers..."
                         className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:border-primary-400 transition-colors"
                     />
                 </div>
@@ -186,9 +187,9 @@ const CategoryProducts = () => {
 
                             <div className="p-5 flex-1 flex flex-col gap-3">
                                 <div>
-                                    {product.model_number && (
+                                    {(product.cat_no || product.model_number) && (
                                         <p className="text-[10px] font-black text-primary-500 uppercase tracking-widest mb-1">
-                                            {product.model_number}
+                                            {[product.cat_no, product.model_number].filter(Boolean).join(' · ')}
                                         </p>
                                     )}
                                     <Link to={`/admin/products/${categoryId}/${product.id}`}>

@@ -545,6 +545,8 @@ export async function createInquiryViaSupabase(inquiryData, items) {
 /**
  * One-time repair: update any Validation inquiry still saved as 'pending' to 'completed'.
  * Safe to call on every dashboard load — only touches rows that need fixing.
+ * Customer requests are excluded: a customer's Validation legitimately stays 'pending'
+ * until Admin assigns a Partner (which approves it), so it must never be auto-completed.
  */
 export async function repairValidationInquiryStatuses() {
   try {
@@ -552,7 +554,8 @@ export async function repairValidationInquiryStatuses() {
       .from('inquiries')
       .update({ status: 'completed' })
       .eq('type', 'Validation')
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .or('performed_by.is.null,performed_by.not.ilike.customer');
 
     if (error) {
       console.warn('[repairValidationInquiryStatuses] update failed:', error.message);

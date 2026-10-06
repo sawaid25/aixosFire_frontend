@@ -39,7 +39,51 @@ const deriveNotificationDisplay = (n, fallbackTitle) => {
     if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') {
         return { title: n.title || (n.type === 'general_inquiry' ? 'New General Inquiry' : 'New Inquiry Assigned'), type: n.type };
     }
-    return { title: fallbackTitle, type: 'message' };
+    if (n.type === 'agent_inactive') {
+        return { title: n.title || 'Inquiries need a new Agent', type: 'agent_inactive' };
+    }
+    if (n.type === 'customer_inquiry_referred') {
+        return { title: n.title || 'Customer Request Referred', type: n.type };
+    }
+    // Only real chat notifications (type 'message') open the chat box. Anything else that
+    // belongs to an inquiry opens that inquiry (see inquiryPathFor) instead.
+    if (n.type === 'message') return { title: fallbackTitle, type: 'message' };
+    if (n.inquiry_id) return { title: n.title || fallbackTitle, type: 'inquiry_update' };
+    return { title: n.title || fallbackTitle, type: 'message' };
+};
+
+/** A notification row → bell item; used for both the initial load and realtime inserts. */
+const toBellItem = (n, fallbackTitle) => {
+    const { title, type } = deriveNotificationDisplay(n, fallbackTitle);
+    return {
+        id: `notif-${n.id}`,
+        title,
+        message: n.message,
+        type,
+        timestamp: n.created_at,
+        isRead: Boolean(n.is_read),
+        relatedId: n.inquiry_id,
+        senderId: n.sender_id,
+        senderRole: n.sender_role
+    };
+};
+
+/**
+ * recipient_id alone is ambiguous: customers, agents and admins all have small integer
+ * ids, so e.g. Agent 1 and Customer 1 share recipient_id '1'. A row is only for this
+ * viewer when recipient_role matches too (stored as 'Agent' / 'agent' etc.).
+ */
+const isForRole = (n, role) => String(n?.recipient_role || '').trim().toLowerCase() === String(role || '').toLowerCase();
+
+/** Where an inquiry lives for each role. */
+const inquiryPathFor = (role, inquiryId) => {
+    switch ((role || '').toLowerCase()) {
+        case 'admin': return `/admin/inquiries/${inquiryId}`;
+        case 'agent': return `/agent/query/${inquiryId}`;
+        case 'partner': return `/partner/inquiry/${inquiryId}`;
+        case 'customer': return `/customer/inquiries/${inquiryId}`;
+        default: return null;
+    }
 };
 
 const NotificationBell = ({ onOpenChat }) => {
@@ -124,6 +168,7 @@ const NotificationBell = ({ onOpenChat }) => {
                 .from('notifications')
                 .select('*')
                 .eq('recipient_id', user.id)
+                .ilike('recipient_role', 'customer')
                 .order('created_at', { ascending: false })
                 .limit(15);
             
@@ -181,6 +226,7 @@ const NotificationBell = ({ onOpenChat }) => {
                 .from('notifications')
                 .select('*')
                 .eq('recipient_id', user.id)
+                .ilike('recipient_role', 'agent')
                 .order('created_at', { ascending: false })
                 .limit(15);
 
@@ -234,6 +280,7 @@ const NotificationBell = ({ onOpenChat }) => {
                 .from('notifications')
                 .select('*')
                 .eq('recipient_id', user.id)
+                .ilike('recipient_role', role)
                 .order('created_at', { ascending: false })
                 .limit(15);
 
@@ -284,6 +331,26 @@ const NotificationBell = ({ onOpenChat }) => {
                         });
                     }
                 });
+
+                // Customer requests still waiting for Admin to assign a Partner — derived live
+                // (like the complaint counts) so nothing is missed even if a notification row
+                // wasn't written for one.
+                const { count: pendingRequests } = await supabase
+                    .from('inquiries')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('performed_by', 'Customer')
+                    .eq('is_general_inquiry', true)
+                    .is('partner_id', null);
+                if (pendingRequests > 0) {
+                    list.unshift({
+                        id: 'customer-requests-pending',
+                        title: 'Customer Requests',
+                        message: `${pendingRequests} customer request${pendingRequests > 1 ? 's' : ''} awaiting partner assignment`,
+                        type: 'customer_requests',
+                        timestamp: new Date().toISOString(),
+                        isRead: false,
+                    });
+                }
 
                 // Fallback: generic count for non-agent (customer/partner) complaints
                 if (seenAgents.size === 0) {
@@ -354,19 +421,8 @@ const NotificationBell = ({ onOpenChat }) => {
                 }, (payload) => {
                     console.log('[NotificationBell] customer notification received:', payload.new);
                     const n = payload.new;
-                    appendNotification(n, (n) => ({
-                        id: `notif-${n.id}`,
-                        title: n.notification_type === 'partial_accept'
-                            ? 'Partial refill update'
-                            : n.sender_role === 'partner' ? 'Partner Update' : 'New System Alert',
-                        message: n.message,
-                        type: n.notification_type === 'partial_accept' ? 'partial_accept' : 'message',
-                        timestamp: n.created_at,
-                        isRead: false,
-                        relatedId: n.inquiry_id,
-                        senderId: n.sender_id,
-                        senderRole: n.sender_role,
-                    }));
+                    if (!isForRole(n, role)) return; // same id, other role (see isForRole)
+                    appendNotification(n, (n) => toBellItem(n, n.sender_role === 'partner' ? 'Partner Update' : 'New System Alert'));
                 })
                 .subscribe((status) => {
                     console.log('[NotificationBell] customer notif subscription:', status);
@@ -406,19 +462,8 @@ const NotificationBell = ({ onOpenChat }) => {
                 }, (payload) => {
                     console.log('[NotificationBell] agent notification received:', payload.new);
                     const n = payload.new;
-                    appendNotification(n, (n) => ({
-                        id: `notif-${n.id}`,
-                        title: n.notification_type === 'partial_accept'
-                            ? 'Partial refill update'
-                            : n.sender_role === 'partner' ? 'Partner update' : 'System alert',
-                        message: n.message,
-                        type: n.notification_type === 'partial_accept' ? 'partial_accept' : 'message',
-                        timestamp: n.created_at,
-                        isRead: false,
-                        relatedId: n.inquiry_id,
-                        senderId: n.sender_id,
-                        senderRole: n.sender_role,
-                    }));
+                    if (!isForRole(n, role)) return; // same id, other role (see isForRole)
+                    appendNotification(n, (n) => toBellItem(n, n.sender_role === 'partner' ? 'Partner update' : 'System alert'));
                 })
                 .subscribe((status) => {
                     console.log('[NotificationBell] agent notif subscription:', status);
@@ -457,16 +502,10 @@ const NotificationBell = ({ onOpenChat }) => {
                 }, (payload) => {
                     console.log('[NotificationBell] partner/admin notification received:', payload.new);
                     const n = payload.new;
+                    if (!isForRole(n, role)) return; // same id, other role (see isForRole)
                     const isProductAssigned = n.notification_type === 'product_assigned' || n.type === 'product_assigned';
                     if (isProductAssigned) invalidatePartnerProducts();
-                    appendNotification(n, (n) => ({
-                        id: `notif-${n.id}`,
-                        title: isProductAssigned ? 'New Product Assigned' : 'System alert',
-                        message: n.message,
-                        type: isProductAssigned ? 'product_assigned' : 'message',
-                        timestamp: n.created_at,
-                        isRead: false,
-                    }));
+                    appendNotification(n, (n) => toBellItem(n, 'System alert'));
                 })
                 .subscribe((status) => {
                     console.log('[NotificationBell] partner/admin notif subscription:', status);
@@ -543,10 +582,13 @@ const NotificationBell = ({ onOpenChat }) => {
             return;
         }
         if (notification.type === 'message' && onOpenChat) {
+            // Real chat notification — open the conversation.
             onOpenChat(notification.relatedId, {
                 senderId: notification.senderId,
                 senderRole: notification.senderRole
             });
+            setIsOpen(false);
+            return;
         }
         if (notification.type === 'product_assigned') {
             invalidatePartnerProducts(); // pull the freshly-assigned product on landing
@@ -554,28 +596,22 @@ const NotificationBell = ({ onOpenChat }) => {
             setIsOpen(false);
             return;
         }
-        if (notification.type === 'general_inquiry' && notification.relatedId) {
-            navigate(`/admin/inquiries/${notification.relatedId}`);
+        if (notification.type === 'agent_inactive') {
+            // An Agent left / went inactive — their open inquiries wait for reassignment.
+            navigate('/admin/inquiries?needs_agent=1');
             setIsOpen(false);
             return;
         }
-        if (notification.type === 'general_inquiry_assigned' && notification.relatedId) {
-            navigate(`/partner/inquiry/${notification.relatedId}`);
+        if (notification.type === 'customer_requests') {
+            navigate('/admin/general-inquiries?source=customer');
             setIsOpen(false);
             return;
         }
-        if (typeof notification.type === 'string' && notification.type.startsWith('renewal_') && notification.relatedId) {
-            const role = (user?.role || '').toLowerCase();
-            if (role === 'partner') {
-                navigate(`/partner/inquiry/${notification.relatedId}`);
-            } else if (role === 'customer') {
-                navigate('/customer/dashboard');
-            }
-            // No dedicated agent-side inquiry detail page exists today — the bell
-            // still shows/marks the notification read, it just doesn't navigate.
-            setIsOpen(false);
-            return;
-        }
+        // Every other inquiry notification (new General Inquiry / customer request,
+        // assignments, renewals, quotations, pickups, …) opens that inquiry on the
+        // viewer's own inquiry page.
+        const path = notification.relatedId ? inquiryPathFor(role, notification.relatedId) : null;
+        if (path) navigate(path);
         setIsOpen(false);
     };
 

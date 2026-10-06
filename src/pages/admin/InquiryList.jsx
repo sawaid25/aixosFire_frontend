@@ -4,7 +4,7 @@ import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
 import {
     Search, ChevronLeft, ChevronRight, Eye, Filter,
-    Activity, Calendar, Inbox
+    Activity, Calendar, Inbox, UserX
 } from 'lucide-react';
 
 const SERVICE_TYPES = ['All', 'inspection', 'refilling', 'installation', 'validation', 'maintenance'];
@@ -17,6 +17,21 @@ const getBadgeClass = (status) => {
     if (['rejected','cancelled'].includes(s)) return 'bg-red-100 text-red-700';
     if (['in progress','scheduled'].includes(s)) return 'bg-blue-100 text-blue-700';
     return 'bg-amber-100 text-amber-700';
+};
+
+// Same rule as Agent login / backend isActiveAgentStatus: 'accepted', or legacy 'active'.
+const isActiveAgent = (agent) => ['accepted', 'active'].includes(String(agent?.status || '').trim().toLowerCase());
+const CLOSED_STATUSES = ['completed', 'closed', 'rejected', 'cancelled'];
+
+/**
+ * Open inquiry with no active Agent: a customer request still waiting for one, or any
+ * inquiry whose Agent is on hold / rejected / gone (left). Admin reassigns these from
+ * the inquiry page.
+ */
+const needsAgent = (inq) => {
+    if (CLOSED_STATUSES.includes((inq.status || '').toLowerCase())) return false;
+    if (!inq.agent_id) return String(inq.performed_by || '').trim().toLowerCase() === 'customer';
+    return !isActiveAgent(inq.agents);
 };
 
 const normalizeStatus = (raw) => {
@@ -34,6 +49,9 @@ const InquiryList = () => {
     );
     const [typeFilter, setType]       = useState('All');
     const [generalOnly, setGeneralOnly] = useState(false);
+    const [needsAgentOnly, setNeedsAgentOnly] = useState(() =>
+        new URLSearchParams(window.location.search).get('needs_agent') === '1'
+    );
     const [page, setPage]             = useState(0);
     const [total, setTotal]           = useState(0);
 
@@ -42,6 +60,7 @@ const InquiryList = () => {
     useEffect(() => {
         const normalized = normalizeStatus(searchParams.get('status'));
         setStatus(normalized);
+        if (searchParams.get('needs_agent') === '1') setNeedsAgentOnly(true);
     }, [searchParams]);
 
     const fetch = useCallback(async () => {
@@ -53,7 +72,7 @@ const InquiryList = () => {
             let q = supabase
                 .from('inquiries')
                 .select(
-                    'id,inquiry_no,type,status,priority,created_at,follow_up_date,customer_id,agent_id,partner_id,is_general_inquiry,customers(business_name),agents(name)'
+                    'id,inquiry_no,type,status,priority,created_at,follow_up_date,customer_id,agent_id,partner_id,is_general_inquiry,performed_by,customers(business_name),agents(name,status)'
                 )
                 .order('created_at', { ascending: false });
 
@@ -66,9 +85,10 @@ const InquiryList = () => {
 
             // Client-side status filter (case-insensitive)
             const all = data || [];
-            const filtered = statusFilter === 'All'
+            let filtered = statusFilter === 'All'
                 ? all
                 : all.filter(row => (row.status || '').toLowerCase() === statusFilter.toLowerCase());
+            if (needsAgentOnly) filtered = filtered.filter(needsAgent);
 
             setTotal(filtered.length);
             setInquiries(filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE));
@@ -77,12 +97,12 @@ const InquiryList = () => {
         } finally {
             setLoading(false);
         }
-    }, [search, statusFilter, typeFilter, generalOnly, page]);
+    }, [search, statusFilter, typeFilter, generalOnly, needsAgentOnly, page]);
 
     useEffect(() => { fetch(); }, [fetch]);
 
     // Reset to page 0 when filters change
-    useEffect(() => { setPage(0); }, [search, statusFilter, typeFilter, generalOnly]);
+    useEffect(() => { setPage(0); }, [search, statusFilter, typeFilter, generalOnly, needsAgentOnly]);
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -155,6 +175,19 @@ const InquiryList = () => {
                 >
                     <Inbox size={14} /> General Only
                 </button>
+
+                {/* Open inquiries with no active Agent (none yet, or the Agent left / is on hold) */}
+                <button
+                    type="button"
+                    onClick={() => setNeedsAgentOnly((v) => !v)}
+                    className={`flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border transition-colors ${
+                        needsAgentOnly
+                            ? 'bg-red-500 border-red-500 text-white'
+                            : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                >
+                    <UserX size={14} /> Needs Agent
+                </button>
             </div>
 
             {/* Table */}
@@ -216,10 +249,15 @@ const InquiryList = () => {
                                                         to={`/admin/agents/${inq.agent_id}`}
                                                         className="text-sm text-slate-700 hover:text-violet-600 hover:underline font-medium"
                                                     >
-                                                        {inq.agents?.name || 'Unassigned'}
+                                                        {inq.agents?.name || 'Unknown agent'}
                                                     </Link>
                                                 ) : (
                                                     <span className="text-sm text-slate-400">Unassigned</span>
+                                                )}
+                                                {inq.agent_id && !isActiveAgent(inq.agents) && (
+                                                    <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-700">
+                                                        <UserX size={10} /> Inactive
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">

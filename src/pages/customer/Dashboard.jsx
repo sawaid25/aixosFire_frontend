@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { supabase } from '../../supabaseClient';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import {
@@ -12,22 +11,32 @@ import {
     ArrowRight,
     ClipboardList,
     FileCheck,
-    Loader2,
     RefreshCw,
-    FileText
+    FileText,
+    Eye,
+    Loader2
 } from 'lucide-react';
 import PageLoader from '../../components/PageLoader';
-import { fetchCustomerInquiries, fetchCustomerQuotations, approveQuotation } from '../../api/customerPortal';
-import { approveMaintenanceSchedule } from '../../api/maintenanceApi';
+import InquiryStatusBadge from '../../components/InquiryStatusBadge';
+import InquiryTimeline from '../../components/InquiryTimeline';
+import { fetchCustomerInquiries, fetchCustomerQuotations, fetchCustomerItems } from '../../api/customerPortal';
+import { isOpenInquiryStatus } from '../../constants/inquiryStatus';
 import {
     buildHistoryRowsFromInquiry,
-    buildHistoryRowsFromService,
     formatDateSafe,
     normalizeCustomerInquiries,
-    buildInquiryTimeline
+    buildInquiryTimeline,
+    inquiryTypeDisplay,
+    inquiryProductSummary
 } from './dashboardUtils';
-import { toast } from 'react-hot-toast';
-import InquiryChatBox from '../../components/Chat/InquiryChatBox';
+import {
+    PartnerInfoLine,
+    RejectionReasonNote,
+    VisitScheduleRow,
+    InquiryItemsList,
+    InquiryMessages
+} from './components/InquiryParts';
+import QuotationCard from './components/QuotationCard';
 
 const EXPIRY_ALERT_DAYS = 10;
 
@@ -101,91 +110,102 @@ const InventoryCard = ({ item }) => {
 const CustomerDashboard = () => {
     const { user } = useAuth();
     const [inventory, setInventory] = useState([]);
-    const [history, setHistory] = useState([]);
     const [inquiries, setInquiries] = useState([]);
     const [quotations, setQuotations] = useState([]);
     const [maintenanceQuotations, setMaintenanceQuotations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [inquiriesApiUnavailable, setInquiriesApiUnavailable] = useState(false);
+    // True once the inquiries list has loaded successfully at least once.
+    const [inquiriesLoaded, setInquiriesLoaded] = useState(false);
     const [quotesApiUnavailable, setQuotesApiUnavailable] = useState(false);
-    const [quotationActionId, setQuotationActionId] = useState(null);
 
     // Customer location is synced via useLocationTracker in Layout (customers.location_lat / location_lng).
 
+    // Bumped by "Try again" / after an action to re-fetch everything.
+    const [reloadKey, setReloadKey] = useState(0);
+    const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+    const userId = user?.id;
+
     useEffect(() => {
-        if (!user) return;
+        if (!userId) return undefined;
+        let cancelled = false;
 
         const load = async () => {
             setLoading(true);
             setApiError('');
+            setInquiriesApiUnavailable(false);
+            setQuotesApiUnavailable(false);
             try {
-                const [invRes, histRes, inqRes, quoRes, maintQuoRes] = await Promise.all([
+                // All reads go through the authenticated, customer-scoped API (no anon-key table reads).
+                // Each source fails independently — a failed equipment or quotation call must not
+                // hide the customer's inquiries (and vice versa).
+                const [invRes, inqRes, quoRes] = await Promise.all([
                     // Equipment source for customer dashboard = inquiry_items (predictable, holds capacity/expiry/etc).
-                    supabase
-                        .from('inquiry_items')
-                        .select('*')
-                        .eq('customer_id', user.id)
-                        .order('updated_at', { ascending: false }),
-                    supabase.from('services').select('*').eq('customer_id', user.id).order('scheduled_date', { ascending: false }),
+                    fetchCustomerItems().catch((e) => {
+                        console.warn('[CustomerDashboard] equipment API:', e?.message || e);
+                        if (!cancelled) setApiError('Your equipment could not be loaded. Try refreshing.');
+                        return [];
+                    }),
                     fetchCustomerInquiries().catch((e) => {
                         console.warn('[CustomerDashboard] inquiries API:', e?.message || e);
-                        setInquiriesApiUnavailable(true);
-                        return [];
+                        if (!cancelled) setInquiriesApiUnavailable(true);
+                        return null;
                     }),
                     fetchCustomerQuotations().catch((e) => {
                         console.warn('[CustomerDashboard] quotations API:', e?.message || e);
-                        setQuotesApiUnavailable(true);
+                        if (!cancelled) setQuotesApiUnavailable(true);
                         return [];
-                    }),
-                    supabase
-                        .from('quotations')
-                        .select('*, inquiries(type)')
-                        .eq('customer_id', user.id)
-                        .order('created_at', { ascending: false })
+                    })
                 ]);
+                if (cancelled) return;
 
-                if (invRes.error) throw invRes.error;
-                if (histRes.error) throw histRes.error;
-                if (maintQuoRes.error) throw maintQuoRes.error;
-
-                setInventory(invRes.data || []);
-                setHistory(histRes.data || []);
-                setInquiriesApiUnavailable(false);
-                setQuotesApiUnavailable(false);
-
-                const inqList = Array.isArray(inqRes) ? inqRes : [];
+                const invList = Array.isArray(invRes) ? invRes : [];
+                // null = the inquiries request failed — keep whatever was shown before rather
+                // than replacing it with an empty list that reads as "no inquiries".
+                const inqList = Array.isArray(inqRes) ? inqRes : null;
                 const quoList = Array.isArray(quoRes) ? quoRes : [];
 
-                setInquiries(normalizeCustomerInquiries(inqList));
+                setInventory(invList);
+                if (inqList) {
+                    // Newest request first, so a just-created inquiry is always at the top.
+                    const normalized = normalizeCustomerInquiries(inqList);
+                    normalized.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                    setInquiries(normalized);
+                    setInquiriesLoaded(true);
+                }
                 setQuotations(quoList);
                 // This panel is specifically labeled "Maintenance Quotation" below — without
                 // this filter it duplicated every quotation regardless of type (Renewal's
                 // included, mislabeled as Maintenance).
                 setMaintenanceQuotations(
-                    (maintQuoRes.data || []).filter(
+                    quoList.filter(
                         (q) => String(q.inquiries?.type || '').trim().toLowerCase() === 'maintenance'
                     )
                 );
 
                 if (import.meta.env.DEV) {
                     console.debug('[CustomerDashboard] loaded', {
-                        inventory: (invRes.data || []).length,
-                        services: (histRes.data || []).length,
-                        inquiries: (Array.isArray(inqRes) ? inqRes : []).length,
-                        quotations: (Array.isArray(quoRes) ? quoRes : []).length
+                        inventory: invList.length,
+                        inquiries: inqList ? inqList.length : 'failed',
+                        quotations: quoList.length
                     });
                 }
             } catch (err) {
                 console.error('CustomerDashboard load error', err);
-                setApiError('Some data could not be loaded. Try refreshing.');
+                if (!cancelled) setApiError('Some data could not be loaded. Try refreshing.');
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
 
         load();
-    }, [user]);
+        return () => {
+            cancelled = true;
+        };
+        // Keyed on the user's id (not the user object, which AuthContext re-creates) so the
+        // dashboard loads once per visit instead of several overlapping times.
+    }, [userId, reloadKey]);
 
     const [expandedInquiryIds, setExpandedInquiryIds] = useState(() => new Set());
 
@@ -209,52 +229,27 @@ const CustomerDashboard = () => {
     }, [inventory]);
 
     const activeInquiriesCount = useMemo(
-        () =>
-            inquiries.filter((q) => {
-                const s = (q.status || '').toLowerCase();
-                return ['pending', 'active', 'in progress', 'quoted'].includes(s);
-            }).length,
+        () => inquiries.filter((q) => isOpenInquiryStatus(q.status)).length,
         [inquiries]
     );
 
     const serviceHistoryRows = useMemo(() => {
-        const rows = [
-            ...inquiries.map(buildHistoryRowsFromInquiry),
-            ...history.map(buildHistoryRowsFromService)
-        ];
+        const rows = inquiries.map(buildHistoryRowsFromInquiry);
         rows.sort((a, b) => {
             const da = new Date(a.serviceDate || 0).getTime();
             const db = new Date(b.serviceDate || 0).getTime();
             return db - da;
         });
         return rows;
-    }, [inquiries, history]);
+    }, [inquiries]);
 
-    const handleApproveQuote = async (q) => {
-        const id = q.id;
-        if (!id) return;
-        setQuotationActionId(id);
-        try {
-            await approveQuotation(id);
-            toast.success('Quotation approved');
-            setQuotations((prev) =>
-                prev.map((x) => (x.id === id ? { ...x, status: 'approved' } : x))
-            );
-        } catch (e) {
-            toast.error(e?.response?.data?.error || 'Could not approve quotation');
-        } finally {
-            setQuotationActionId(null);
-        }
-    };
+    const openInquiries = useMemo(
+        () => inquiries.filter((q) => isOpenInquiryStatus(q.status)),
+        [inquiries]
+    );
 
-    const handleScheduleAction = async (inquiryId, status) => {
-        try {
-            await approveMaintenanceSchedule(inquiryId, status);
-            toast.success(`Schedule ${status} successfully`);
-            window.location.reload();
-        } catch (e) {
-            toast.error(e?.response?.data?.error || `Could not update schedule`);
-        }
+    const handleQuotationUpdated = (updated) => {
+        setQuotations((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
     };
 
     return (
@@ -264,7 +259,7 @@ const CustomerDashboard = () => {
             {apiError && (
                 <div className="bg-amber-50 border border-amber-100 text-amber-900 text-sm font-medium px-4 py-3 rounded-2xl flex items-center justify-between gap-4">
                     {apiError}
-                    <button type="button" onClick={() => window.location.reload()} className="text-primary-600 font-bold flex items-center gap-1">
+                    <button type="button" onClick={reload} className="text-primary-600 font-bold flex items-center gap-1">
                         <RefreshCw size={14} /> Refresh
                     </button>
                 </div>
@@ -285,7 +280,7 @@ const CustomerDashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-soft">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Active inquiries</p>
-                    <p className="text-3xl font-black text-slate-900">{activeInquiriesCount}</p>
+                    <p className="text-3xl font-black text-slate-900">{inquiriesLoaded ? activeInquiriesCount : '—'}</p>
                     <p className="text-xs text-slate-500 mt-2">Open or in progress</p>
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-soft">
@@ -295,7 +290,7 @@ const CustomerDashboard = () => {
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-soft">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total inquiries</p>
-                    <p className="text-3xl font-black text-primary-600">{inquiries.length}</p>
+                    <p className="text-3xl font-black text-primary-600">{inquiriesLoaded ? inquiries.length : '—'}</p>
                     <p className="text-xs text-slate-500 mt-2">From your account</p>
                 </div>
             </div>
@@ -307,33 +302,37 @@ const CustomerDashboard = () => {
                         <ClipboardList size={22} className="text-primary-500" /> Inquiries
                     </h2>
                     <Link to="/customer/history" className="text-sm text-primary-600 font-semibold hover:underline">
-                        View all
+                        View all inquiries
                     </Link>
                 </div>
                 <div className="p-6">
-                    {inquiries.length === 0 ? (
-                        <div className="space-y-2">
-                            <p className="text-slate-500 text-sm">No inquiries yet. Create one from “New Inquiry”.</p>
-                            {inquiriesApiUnavailable && (
-                                <p className="text-xs text-amber-700 font-semibold">
-                                    Inquiries are currently unavailable from the API.
-                                </p>
-                            )}
+                    {inquiriesApiUnavailable && (
+                        <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            <span>
+                                Your inquiries could not be loaded right now.
+                                {inquiriesLoaded && ' Showing the last loaded list.'}
+                            </span>
+                            <button type="button" onClick={reload} disabled={loading} className="text-primary-600 font-bold flex items-center gap-1 shrink-0 disabled:opacity-50">
+                                <RefreshCw size={14} /> Try again
+                            </button>
                         </div>
+                    )}
+                    {!inquiriesLoaded ? (
+                        !inquiriesApiUnavailable && (
+                            <div className="flex items-center gap-2 text-slate-500 text-sm py-4">
+                                <Loader2 className="animate-spin" size={18} /> Loading your inquiries...
+                            </div>
+                        )
+                    ) : inquiries.length === 0 ? (
+                        <p className="text-slate-500 text-sm">No inquiries yet. Create one from “New Inquiry”.</p>
                     ) : (
                         <div className="space-y-3">
                             {inquiries.slice(0, 6).map((inq) => {
                                 const key = inq?.id ? `id:${inq.id}` : `no:${inq.inquiry_no}`;
                                 const isOpen = expandedInquiryIds.has(key);
-                                const type = (inq.type || inq.inquiry_type || '—').toString();
-                                const status = inq.status || '—';
+                                const type = inquiryTypeDisplay(inq);
                                 const internalRef =
                                     inq.internal_reference_number || inq.internal_ref || '—';
-
-                                // Find associated maintenance quotation
-                                const associatedQuote = maintenanceQuotations.find(
-                                    (mq) => mq.inquiry_id === inq.id
-                                );
 
                                 const ext = Array.isArray(inq.inquiry_extensions)
                                     ? inq.inquiry_extensions
@@ -341,19 +340,11 @@ const CustomerDashboard = () => {
                                         ? inq.extensions
                                         : [];
                                 const items = Array.isArray(inq.inquiry_items) ? inq.inquiry_items : [];
-                                const services = Array.isArray(inq.inquiry_item_services) ? inq.inquiry_item_services : [];
 
-                                const activityCount =
-                                    ext.length +
-                                    (Array.isArray(inq.inspection_reports) ? inq.inspection_reports.length : 0) +
-                                    (Array.isArray(inq.site_assessments) ? inq.site_assessments.length : 0) +
-                                    services.length;
-
-                                const timeline = buildInquiryTimeline({
-                                    inquiry: inq,
-                                    quotations,
-                                    services: history
-                                });
+                                const product = inquiryProductSummary(inq);
+                                const timeline = buildInquiryTimeline({ inquiry: inq, quotations });
+                                // Every timeline event after "Inquiry Created" counts as an update.
+                                const activityCount = timeline.filter((ev) => ev.key !== 'created').length;
 
                                 return (
                                     <div key={key} className="rounded-2xl border border-slate-100 bg-slate-50">
@@ -370,57 +361,22 @@ const CustomerDashboard = () => {
                                                 <p className="text-xs text-slate-500 mt-1">
                                                     Created: {formatDateSafe(inq.created_at)} · Internal ref: {internalRef}
                                                 </p>
-                                                {/* Only show the visit row when a visit is actually scheduled — `approval_status`
-                                                    alone defaults to 'pending' on every inquiry (a Maintenance-only concept),
-                                                    so gating on it showed a meaningless "Visit: Not set · PENDING" on
-                                                    Validation/Refill/Renewal inquiries that never have a site visit. */}
-                                                {inq.scheduled_date && (
-                                                    <div className="mt-2 text-xs flex flex-col items-start gap-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <Calendar size={14} className="text-primary-500" />
-                                                            <span className="font-bold text-primary-700">
-                                                                Visit: {inq.scheduled_date ? new Date(inq.scheduled_date).toLocaleString('en-PK', {
-                                                                    timeZone: 'Asia/Karachi',
-                                                                    year: 'numeric',
-                                                                    month: 'short',
-                                                                    day: 'numeric',
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit',
-                                                                    hour12: true
-                                                                }) : 'Not set'}
-                                                            </span>
-                                                            {inq.approval_status && (
-                                                                <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[10px] ${inq.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                                                        inq.approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                                                            'bg-amber-100 text-amber-700'
-                                                                    }`}>
-                                                                    {inq.approval_status}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {inq.approval_status === 'pending' && inq.scheduled_date && (
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleScheduleAction(inq.id, 'approved'); }}
-                                                                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider hover:bg-emerald-700 transition"
-                                                                >
-                                                                    Approve
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleScheduleAction(inq.id, 'rejected'); }}
-                                                                    className="px-3 py-1.5 bg-red-500 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider hover:bg-red-600 transition"
-                                                                >
-                                                                    Reject
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                {product && (
+                                                    <p className="text-xs text-slate-600 mt-1">
+                                                        {[
+                                                            product.name,
+                                                            product.productNo ? `Product# ${product.productNo}` : null,
+                                                            product.catNo ? `CAT# ${product.catNo}` : null,
+                                                            product.more > 0 ? `+${product.more} more` : null
+                                                        ].filter(Boolean).join(' · ')}
+                                                    </p>
                                                 )}
+                                                <PartnerInfoLine inquiry={inq} />
+                                                <RejectionReasonNote inquiry={inq} />
+                                                <VisitScheduleRow inquiry={inq} onDone={reload} />
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-black uppercase text-slate-700">
-                                                    {status}
-                                                </span>
+                                                <InquiryStatusBadge status={inq.status} />
                                                 <span className="text-xs font-bold text-slate-500">
                                                     {activityCount} updates
                                                 </span>
@@ -429,6 +385,14 @@ const CustomerDashboard = () => {
                                                 </span>
                                             </div>
                                         </button>
+                                        <div className="px-4 pb-3 -mt-1 flex justify-end">
+                                            <Link
+                                                to={`/customer/inquiries/${inq.id}`}
+                                                className="text-xs font-bold text-primary-600 hover:underline"
+                                            >
+                                                Open inquiry →
+                                            </Link>
+                                        </div>
 
                                         {isOpen && (
                                             <div className="px-4 pb-4">
@@ -437,25 +401,11 @@ const CustomerDashboard = () => {
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                                                             Activity timeline
                                                         </p>
-                                                        {timeline.length === 0 ? (
-                                                            <p className="text-sm text-slate-500 italic">No activity yet.</p>
-                                                        ) : (
-                                                            <div className="space-y-2">
-                                                                {timeline.slice(0, 8).map((ev, idx) => (
-                                                                    <div key={ev.key || idx} className="flex items-start gap-3">
-                                                                        <div className="mt-1.5 w-2.5 h-2.5 rounded-full bg-primary-500 shrink-0" />
-                                                                        <div className="flex-1 flex items-center justify-between gap-4">
-                                                                            <span className="text-sm font-semibold text-slate-800">
-                                                                                {ev.label}
-                                                                            </span>
-                                                                            <span className="text-xs text-slate-500">
-                                                                                {formatDateSafe(ev.ts)}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                        <InquiryTimeline
+                                                            inquiryId={inq.id}
+                                                            createdAt={inq.created_at}
+                                                            fallbackEvents={timeline.slice(0, 8)}
+                                                        />
                                                     </div>
 
                                                     {items.length > 0 && (
@@ -463,18 +413,7 @@ const CustomerDashboard = () => {
                                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                                                                 Items
                                                             </p>
-                                                            <div className="space-y-2">
-                                                                {items.slice(0, 5).map((it) => (
-                                                                    <div key={it.id || `${it.type}-${it.serial_no}`} className="flex justify-between gap-4 text-sm">
-                                                                        <span className="font-semibold text-slate-800">
-                                                                            {it.system_type || it.type || 'Item'}
-                                                                        </span>
-                                                                        <span className="text-slate-500">
-                                                                            Qty: {it.quantity ?? '—'} {it.unit || ''}
-                                                                        </span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
+                                                            <InquiryItemsList items={items} limit={5} />
                                                         </div>
                                                     )}
 
@@ -525,12 +464,7 @@ const CustomerDashboard = () => {
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
                                                             Messages / Support
                                                         </p>
-                                                        <InquiryChatBox
-                                                            inquiryId={inq.id}
-                                                            recipientId={inq.partner_id}
-                                                            recipientRole="Partner"
-                                                            title={`Chat with Partner regarding ${inq.inquiry_no || 'Inquiry'}`}
-                                                        />
+                                                        <InquiryMessages inquiry={inq} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -552,61 +486,20 @@ const CustomerDashboard = () => {
                 </div>
                 <div className="p-6">
                     {quotations.length === 0 && maintenanceQuotations.length === 0 ? (
-                        <p className="text-slate-500 text-sm">No quotations yet. When a partner sends a quote, it will appear here.</p>
+                        <div className="space-y-2">
+                            <p className="text-slate-500 text-sm">No quotations yet. When a partner sends a quote, it will appear here.</p>
+                            {quotesApiUnavailable && (
+                                <p className="text-xs text-amber-700 font-semibold">
+                                    Quotations are currently unavailable from the API.
+                                </p>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             {/* General Quotations */}
-                            {quotations.map((q) => {
-                                const pending =
-                                    (q.status || '').toLowerCase() === 'pending' ||
-                                    (q.status || '').toLowerCase() === 'submitted' ||
-                                    (q.status || '').toLowerCase() === 'sent';
-                                return (
-                                    <div
-                                        key={q.id}
-                                        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100"
-                                    >
-                                        <div>
-                                            <p className="font-bold text-slate-900">
-                                                {q.quote_reference || q.reference || `Quotation #${q.id}`}
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                                Inquiry: {q.inquiry_no || q.inquiry_id || '—'} · Amount:{' '}
-                                                {(q.estimated_cost ?? q.amount) != null
-                                                    ? `SAR ${Number(q.estimated_cost ?? q.amount).toLocaleString()}`
-                                                    : '—'}
-                                            </p>
-                                            <p className="text-xs text-slate-400 mt-1 capitalize">Status: {q.status || '—'}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {q.pdf_url && (
-                                                <a
-                                                    href={q.pdf_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50"
-                                                >
-                                                    View PDF
-                                                </a>
-                                            )}
-                                            {pending && (
-                                                <button
-                                                    type="button"
-                                                    disabled={quotationActionId === q.id}
-                                                    onClick={() => handleApproveQuote(q)}
-                                                    className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50"
-                                                >
-                                                    {quotationActionId === q.id ? (
-                                                        <Loader2 className="animate-spin inline" size={16} />
-                                                    ) : (
-                                                        'Approve'
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {quotations.map((q) => (
+                                <QuotationCard key={q.id} quotation={q} onUpdated={handleQuotationUpdated} />
+                            ))}
 
                             {/* Maintenance Quotations */}
                             {maintenanceQuotations.map((mq) => (
@@ -624,7 +517,7 @@ const CustomerDashboard = () => {
                                                 <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-black uppercase rounded-md tracking-wider">New</span>
                                             </div>
                                             <p className="text-xs text-slate-500 mt-1">
-                                                For Inquiry: <span className="font-bold text-slate-700">#{mq.inquiry_id?.slice(0, 8)}…</span> ·
+                                                For Inquiry: <span className="font-bold text-slate-700">{mq.inquiries?.inquiry_no || '—'}</span> ·
                                                 Estimated Cost: <span className="font-bold text-emerald-600">SAR {mq.estimated_cost}</span>
                                             </p>
                                             <p className="text-[10px] text-slate-400 mt-1">Submitted: {new Date(mq.created_at).toLocaleDateString()}</p>
@@ -649,11 +542,11 @@ const CustomerDashboard = () => {
                 </div>
             </div>
 
-            {/* Service history (all types) */}
+            {/* Inquiry history */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
                 <div className="p-6 border-b border-slate-50 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                        <ClipboardList size={22} className="text-primary-500" /> Service & inquiry history
+                        <ClipboardList size={22} className="text-primary-500" /> Inquiry history
                     </h2>
                     <Link to="/customer/history" className="text-sm text-primary-600 font-semibold hover:underline">
                         View all
@@ -669,13 +562,16 @@ const CustomerDashboard = () => {
                                 <th className="px-4 py-3">Performed by</th>
                                 <th className="px-4 py-3">Status</th>
                                 <th className="px-4 py-3">Inquiry / Ref</th>
+                                <th className="px-4 py-3 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {serviceHistoryRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400 font-medium">
-                                        No history yet. Create an inquiry or book a service.
+                                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-medium">
+                                        {inquiriesLoaded
+                                            ? 'No history yet. Create an inquiry to get started.'
+                                            : inquiriesApiUnavailable ? 'History is unavailable right now.' : 'Loading...'}
                                     </td>
                                 </tr>
                             ) : (
@@ -686,14 +582,22 @@ const CustomerDashboard = () => {
                                         <td className="px-4 py-3 text-slate-600">{formatDateSafe(row.expiryDate)}</td>
                                         <td className="px-4 py-3 text-slate-600">{row.performedBy}</td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                                                {row.status}
-                                            </span>
+                                            <InquiryStatusBadge status={row.status} />
                                         </td>
                                         <td className="px-4 py-3 text-xs text-slate-500">
                                             {row.inquiryNo !== '—' && <span className="block">{row.inquiryNo}</span>}
                                             {row.internalRef !== '—' && <span className="block">Ref: {row.internalRef}</span>}
                                             {row.inquiryNo === '—' && row.internalRef === '—' && '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            {row.inquiryId && (
+                                                <Link
+                                                    to={`/customer/inquiries/${row.inquiryId}`}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-primary-600 hover:border-primary-300 hover:bg-primary-50 transition-colors whitespace-nowrap"
+                                                >
+                                                    <Eye size={14} /> View details
+                                                </Link>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -739,12 +643,12 @@ const CustomerDashboard = () => {
                 </div>
             </div>
 
-            {/* Recent bookings */}
+            {/* Open inquiries (replaces the legacy `services`-based "Recent bookings") */}
             <div className="grid md:grid-cols-2 gap-8">
                 <div className="bg-white rounded-3xl p-8 shadow-soft border border-slate-100">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                            <Calendar size={20} className="text-blue-500" /> Recent bookings
+                            <Calendar size={20} className="text-blue-500" /> Open inquiries
                         </h3>
                         <Link to="/customer/history" className="text-sm text-primary-600 font-semibold hover:underline">
                             View all
@@ -752,38 +656,36 @@ const CustomerDashboard = () => {
                     </div>
 
                     <div className="space-y-4">
-                        {history.length > 0 ? (
-                            history.slice(0, 3).map((service) => (
-                                <div key={service.id} className="flex items-center p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                        {openInquiries.length > 0 ? (
+                            openInquiries.slice(0, 3).map((inq) => (
+                                <Link
+                                    key={inq.id}
+                                    to={`/customer/inquiries/${inq.id}`}
+                                    className="flex items-center p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-primary-200 transition-colors"
+                                >
                                     <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center text-blue-500 border border-slate-100 shadow-sm font-bold">
-                                        {service.scheduled_date ? new Date(service.scheduled_date).getDate() : '?'}
+                                        {inq.created_at ? new Date(inq.created_at).getDate() : '?'}
                                     </div>
-                                    <div className="ml-4 flex-1">
-                                        <h4 className="font-bold text-slate-900 capitalize">{service.service_type}</h4>
+                                    <div className="ml-4 flex-1 min-w-0">
+                                        <h4 className="font-bold text-slate-900 truncate">{inquiryTypeDisplay(inq)}</h4>
                                         <p className="text-xs text-slate-500">
-                                            {service.scheduled_date
-                                                ? new Date(service.scheduled_date).toLocaleDateString(undefined, {
-                                                    month: 'long',
-                                                    year: 'numeric'
-                                                })
-                                                : 'Pending'}
+                                            {inq.inquiry_no || 'Inquiry'} · {formatDateSafe(inq.created_at)}
                                         </p>
                                     </div>
-                                    <span
-                                        className={`text-xs px-2 py-1 rounded-lg font-bold ${service.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                            }`}
-                                    >
-                                        {service.status || 'Pending'}
-                                    </span>
-                                </div>
+                                    <InquiryStatusBadge status={inq.status} />
+                                </Link>
                             ))
+                        ) : !inquiriesLoaded ? (
+                            <p className="text-sm text-slate-500 py-8 text-center">
+                                {inquiriesApiUnavailable ? 'Open inquiries are unavailable right now.' : 'Loading...'}
+                            </p>
                         ) : (
                             <div className="text-center py-8">
                                 <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-400 mx-auto mb-4">
                                     <CheckCircle size={32} />
                                 </div>
                                 <p className="text-slate-900 font-bold">All caught up</p>
-                                <p className="text-slate-500 text-sm">No scheduled maintenance in the system.</p>
+                                <p className="text-slate-500 text-sm">You have no open inquiries.</p>
                             </div>
                         )}
                     </div>

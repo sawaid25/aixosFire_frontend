@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { Calendar, CheckCircle, Clock, FileText, Wrench, Loader2, Hash } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Calendar, CheckCircle, Clock, FileText, Wrench, Loader2, Hash, RefreshCw } from 'lucide-react';
 import PageLoader from '../../components/PageLoader';
+import InquiryStatusBadge from '../../components/InquiryStatusBadge';
 import { fetchCustomerInquiries } from '../../api/customerPortal';
-import { formatDateSafe, buildHistoryRowsFromInquiry } from './dashboardUtils';
+import { formatDateSafe, buildHistoryRowsFromInquiry, inquiryProductSummary, assignedPartnerInfo } from './dashboardUtils';
 
 const ServiceTimeline = ({ status }) => {
     const steps = ['Requested', 'Scheduled', 'In Progress', 'Completed'];
@@ -41,6 +43,7 @@ const ServiceTimeline = ({ status }) => {
 
 const History = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [services, setServices] = useState([]);
     const [inquiries, setInquiries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -68,23 +71,40 @@ const History = () => {
         fetchHistory();
     }, [user]);
 
+    const userId = user?.id;
+    const [inqError, setInqError] = useState(null);
+    const [inqReloadKey, setInqReloadKey] = useState(0);
+
     useEffect(() => {
-        if (!user) return;
+        if (!userId) return undefined;
+        let cancelled = false;
+        setInqLoading(true);
+        setInqError(null);
         (async () => {
             try {
                 const data = await fetchCustomerInquiries();
-                setInquiries(Array.isArray(data) ? data : []);
+                if (cancelled) return;
+                // Every inquiry of this customer, newest first — no type/status/partner filter,
+                // so requests still pending with Admin are listed too.
+                const list = Array.isArray(data) ? [...data] : [];
+                list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                setInquiries(list);
                 if (import.meta.env.DEV) {
                     console.debug('[Customer History] inquiries', data);
                 }
             } catch (e) {
+                if (cancelled) return;
                 console.warn('[Customer History] inquiries unavailable', e);
-                setInquiries([]);
+                // Keep any previously loaded list; surface the failure instead of an empty list.
+                setInqError(e?.response?.data?.error || e?.message || 'Your inquiries could not be loaded.');
             } finally {
-                setInqLoading(false);
+                if (!cancelled) setInqLoading(false);
             }
         })();
-    }, [user]);
+        return () => {
+            cancelled = true;
+        };
+    }, [userId, inqReloadKey]);
 
     const activeServices = services.filter((s) => ['Requested', 'Scheduled', 'In Progress'].includes(s.status));
     const pastServices = services.filter((s) => ['Completed', 'Cancelled'].includes(s.status));
@@ -119,12 +139,30 @@ const History = () => {
                 <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <FileText size={20} className="text-primary-500" /> Inquiries
                 </h2>
-                {inqLoading ? (
+                {inqError && (
+                    <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <span>Your inquiries could not be loaded right now.</span>
+                        <button
+                            type="button"
+                            onClick={() => setInqReloadKey((k) => k + 1)}
+                            disabled={inqLoading}
+                            className="text-primary-600 font-bold flex items-center gap-1 shrink-0 disabled:opacity-50"
+                        >
+                            <RefreshCw size={14} /> Try again
+                        </button>
+                    </div>
+                )}
+                {inqLoading && inquiries.length === 0 ? (
                     <div className="flex items-center gap-2 text-slate-500 text-sm py-6">
                         <Loader2 className="animate-spin" size={18} /> Loading inquiries...
                     </div>
                 ) : inquiries.length === 0 ? (
-                    <p className="text-slate-500 text-sm">No inquiries yet. Create one from the dashboard.</p>
+                    !inqError && (
+                        <p className="text-slate-500 text-sm">
+                            No inquiries yet.{' '}
+                            <Link to="/customer/booking" className="text-primary-600 font-semibold hover:underline">Create an inquiry</Link>
+                        </p>
+                    )
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
@@ -132,8 +170,9 @@ const History = () => {
                                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                                     <th className="py-3 pr-4">Inquiry</th>
                                     <th className="py-3 pr-4">Type</th>
+                                    <th className="py-3 pr-4">Product</th>
                                     <th className="py-3 pr-4">Created</th>
-                                    <th className="py-3 pr-4">Performed by</th>
+                                    <th className="py-3 pr-4">Partner</th>
                                     <th className="py-3 pr-4">Internal ref</th>
                                     <th className="py-3">Status</th>
                                 </tr>
@@ -141,19 +180,47 @@ const History = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {inquiries.map((inq) => {
                                     const row = buildHistoryRowsFromInquiry(inq);
+                                    const product = inquiryProductSummary(inq);
+                                    const partner = assignedPartnerInfo(inq);
                                     return (
-                                        <tr key={inq.id}>
-                                            <td className="py-3 pr-4 font-bold text-primary-600">{row.inquiryNo}</td>
+                                        <tr
+                                            key={inq.id}
+                                            onClick={() => navigate(`/customer/inquiries/${inq.id}`)}
+                                            className="cursor-pointer hover:bg-slate-50"
+                                        >
+                                            <td className="py-3 pr-4 font-bold text-primary-600">
+                                                <Link
+                                                    to={`/customer/inquiries/${inq.id}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="hover:underline"
+                                                >
+                                                    {row.inquiryNo}
+                                                </Link>
+                                            </td>
                                             <td className="py-3 pr-4 capitalize">{row.serviceType}</td>
-                                            <td className="py-3 pr-4 text-slate-600">{formatDateSafe(row.serviceDate)}</td>
-                                            <td className="py-3 pr-4 text-slate-600 font-medium">{row.performedBy}</td>
-                                            <td className="py-3 pr-4 text-slate-600 flex items-center gap-1">
-                                                <Hash size={12} /> {row.internalRef}
+                                            <td className="py-3 pr-4 text-slate-600">
+                                                {product ? (
+                                                    <>
+                                                        <span className="block text-slate-800">{product.name || '—'}</span>
+                                                        <span className="block text-xs text-slate-500 font-mono">
+                                                            {[
+                                                                product.productNo ? `Product# ${product.productNo}` : null,
+                                                                product.catNo ? `CAT# ${product.catNo}` : null,
+                                                                product.more > 0 ? `+${product.more} more` : null
+                                                            ].filter(Boolean).join(' · ')}
+                                                        </span>
+                                                    </>
+                                                ) : '—'}
+                                            </td>
+                                            <td className="py-3 pr-4 text-slate-600">{row.serviceDate ? formatDateSafe(row.serviceDate) : '—'}</td>
+                                            <td className="py-3 pr-4 text-slate-600">
+                                                {partner.pendingLabel ? <span className="italic text-slate-500">{partner.pendingLabel}</span> : partner.name}
+                                            </td>
+                                            <td className="py-3 pr-4 text-slate-600">
+                                                <span className="flex items-center gap-1"><Hash size={12} /> {row.internalRef}</span>
                                             </td>
                                             <td className="py-3">
-                                                <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-xs font-bold uppercase">
-                                                    {row.status}
-                                                </span>
+                                                <InquiryStatusBadge status={inq.status} />
                                             </td>
                                         </tr>
                                     );

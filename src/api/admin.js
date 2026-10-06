@@ -90,6 +90,18 @@ export const updateGeneralInquiryAdmins = async (updates) => {
     }
 };
 
+/** Admin changes an Agent's status; an Agent becoming inactive routes their open inquiries to Admin. */
+export const updateAgentStatus = async (agentId, status) => {
+    const response = await client.patch(`/admin/agents/${agentId}/status`, { status });
+    return extractApiData(response, null);
+};
+
+/** Admin assigns an Agent to an unassigned customer request (self-created customer). */
+export const assignInquiryAgent = async (inquiryId, agentId) => {
+    const response = await client.put(`/admin/inquiries/${inquiryId}/assign-agent`, { agent_id: agentId });
+    return extractApiData(response, null);
+};
+
 /** Admin manually routing a General Inquiry (or any unassigned inquiry) to an eligible Partner. */
 export const assignInquiryPartner = async (inquiryId, partnerId) => {
     try {

@@ -509,6 +509,16 @@ const QueryDetail = () => {
                             </div>
                         </section>
                     )}
+
+                    {/* Optional PDF the customer attached to their Validation request */}
+                    {query.customer_document_url && (
+                        <section className="bg-white rounded-3xl border p-6 space-y-3">
+                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                                <FileText className="text-primary-600" size={20} /> Customer Inquiry Document
+                            </h2>
+                            <a href={query.customer_document_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline break-all">{query.customer_document_name || 'View PDF'}</a>
+                        </section>
+                    )}
                 </div>
 
                 {/* Sidebar */}
@@ -599,13 +609,20 @@ const QueryDetail = () => {
                                 </div>
                             </div>
                         )}
-                        <button
-                            onClick={() => setIsSwitchModalOpen(true)}
-                            className="w-full py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-                        >
-                            <UserPlus size={16} />
-                            Switch Partner
-                        </button>
+                        {String(query.performed_by || '').toLowerCase() === 'customer' ? (
+                            // Customer requests are referred to the Agent for visibility; Admin assigns the Partner.
+                            <p className="text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-100 px-4 py-3">
+                                Customer request — the Partner is assigned by Admin.
+                            </p>
+                        ) : (
+                            <button
+                                onClick={() => setIsSwitchModalOpen(true)}
+                                className="w-full py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                <UserPlus size={16} />
+                                Switch Partner
+                            </button>
+                        )}
                     </section>
 
                     {/* Quick Actions */}

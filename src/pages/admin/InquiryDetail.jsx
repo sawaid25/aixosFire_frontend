@@ -3,8 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
-import { assignInquiryPartner } from '../../api/admin';
-import { subtypeOnlyLabel } from '../../utils/productPartnerEligibility';
+import { assignInquiryPartner, assignInquiryAgent } from '../../api/admin';
+import { subtypeOnlyLabel, subtypeForMode, isPartnerServiceEligible } from '../../utils/productPartnerEligibility';
+
+/** Requests a customer submitted themselves (Customer "New inquiry" page) — Admin-first workflow. */
+const isCustomerRequest = (inquiry) => String(inquiry?.performed_by || '').trim().toLowerCase() === 'customer';
+// Same rule as Agent login / backend isActiveAgentStatus: 'accepted', or legacy 'active'.
+const isActiveAgent = (agent) => ['accepted', 'active'].includes(String(agent?.status || '').trim().toLowerCase());
 import {
     ArrowLeft, FileText, User, Briefcase, Handshake,
     Calendar, CheckCircle, Clock, XCircle, Activity,
@@ -348,7 +353,7 @@ const InquiryDetail = () => {
                     inqData.partner_id
                         ? supabase.from('partners').select('*').eq('id', inqData.partner_id).maybeSingle()
                         : Promise.resolve({ data: null }),
-                    supabase.from('inquiry_items').select('*').eq('inquiry_id', id).order('created_at', { ascending: true }),
+                    supabase.from('inquiry_items').select('*, products(id, name, model_number, category_id)').eq('inquiry_id', id).order('created_at', { ascending: true }),
                 ]);
 
                 const enriched = {
@@ -369,12 +374,93 @@ const InquiryDetail = () => {
         load();
     }, [id]);
 
-    // Only relevant for an unassigned General Inquiry. This is a manual Admin routing
-    // decision, not the Agent's automatic product/service matching — so every Active
-    // Partner is offered here, not just ones that already carry the requested product.
-    // Inactive/deleted Partners are still excluded (status filter below); the backend
-    // (PUT /admin/inquiries/:id/assign-partner) re-enforces the Active check and
-    // admin-only authorization regardless of what this list shows.
+    // Only relevant for an unassigned General Inquiry. For an Agent-created one this is a
+    // manual Admin routing decision — every Active Partner is offered. A customer request
+    // reaches a Partner only through this step, so it lists just the eligible ones: the
+    // service/sub-type is enabled (global + per-partner) and every requested product is
+    // assigned to the Partner (same rules as productPartnerEligibility.js). The backend
+    // (PUT /admin/inquiries/:id/assign-partner) re-enforces all of this plus the Active
+    // check and admin-only authorization regardless of what this list shows.
+    const customerRequest = isCustomerRequest(inquiry);
+
+    // Agent assignment — for a customer request without an Agent (self-created customer,
+    // or its creating Agent was inactive), or any inquiry whose Agent is no longer active
+    // (on hold / rejected / record gone). An Agent-created customer's request with an
+    // active Agent is never offered here. Active Agents only ('accepted', or legacy
+    // 'active' — same as login); the backend re-checks all of it.
+    const [agentOptions, setAgentOptions] = useState({ loading: false, agents: [], selected: '', saving: false });
+    const agentInactive = Boolean(inquiry?.agent_id) && !isActiveAgent(inquiry?.agents);
+    const needsAgent = (customerRequest && !inquiry?.agent_id) || agentInactive;
+    useEffect(() => {
+        if (!needsAgent) return undefined;
+        let cancelled = false;
+        (async () => {
+            setAgentOptions((s) => ({ ...s, loading: true }));
+            try {
+                const { data, error } = await supabase
+                    .from('agents')
+                    .select('id, name, email, territory')
+                    .or('status.ilike.accepted,status.ilike.active')
+                    .order('name', { ascending: true });
+                if (error) throw error;
+                if (!cancelled) setAgentOptions({ loading: false, agents: data || [], selected: '', saving: false });
+            } catch (err) {
+                console.error('[InquiryDetail] load agents failed:', err);
+                if (!cancelled) setAgentOptions((s) => ({ ...s, loading: false }));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [needsAgent]);
+
+    const handleAssignAgent = async () => {
+        if (!agentOptions.selected) return;
+        setAgentOptions((s) => ({ ...s, saving: true }));
+        try {
+            await assignInquiryAgent(inquiry.id, agentOptions.selected);
+            const { data: agentData } = await supabase.from('agents').select('*').eq('id', agentOptions.selected).maybeSingle();
+            setInquiry((prev) => ({ ...prev, agent_id: agentData?.id ?? Number(agentOptions.selected), agents: agentData || null }));
+            toast.success(agentInactive ? 'Inquiry reassigned to the new agent.' : 'Agent assigned to this inquiry.');
+        } catch (err) {
+            console.error('[InquiryDetail] assign agent failed:', err);
+            toast.error(err?.response?.data?.error || err.message || 'Failed to assign agent.');
+        } finally {
+            setAgentOptions((s) => ({ ...s, saving: false }));
+        }
+    };
+    const agentPicker = (
+        agentOptions.loading ? (
+            <div className="flex items-center justify-center py-4">
+                <Loader2 size={18} className="animate-spin text-slate-400" />
+            </div>
+        ) : agentOptions.agents.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">No active agents are available to assign.</p>
+        ) : (
+            <div className="flex flex-col gap-2">
+                <select
+                    value={agentOptions.selected}
+                    onChange={(e) => setAgentOptions((s) => ({ ...s, selected: e.target.value }))}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    disabled={agentOptions.saving}
+                >
+                    <option value="">Select an Agent…</option>
+                    {agentOptions.agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                            {a.name || a.email}{a.territory ? ` — ${a.territory}` : ''}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    type="button"
+                    onClick={handleAssignAgent}
+                    disabled={!agentOptions.selected || agentOptions.saving}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+                >
+                    {agentOptions.saving ? <Loader2 size={15} className="animate-spin" /> : <Briefcase size={15} />}
+                    {agentInactive ? 'Reassign Agent' : 'Assign Agent'}
+                </button>
+            </div>
+        )
+    );
     useEffect(() => {
         if (!inquiry?.is_general_inquiry || inquiry?.partner_id) return;
         let cancelled = false;
@@ -389,7 +475,29 @@ const InquiryDetail = () => {
                     .order('business_name', { ascending: true });
                 if (error) throw error;
 
-                if (!cancelled) setAssignOptions({ loading: false, partners: partners || [], selected: '', saving: false });
+                let list = partners || [];
+                if (customerRequest) {
+                    const productIds = [...new Set(items.map((it) => it.product_id).filter(Boolean))];
+                    const subtypes = [...new Set(items.map((it) => subtypeForMode(inquiry.type, it.validation_mode)))];
+                    if (subtypes.length === 0) subtypes.push(subtypeForMode(inquiry.type, 'new'));
+                    const [availRes, globalRes, assignedRes] = await Promise.all([
+                        supabase.from('partner_service_availability').select('partner_id, service_type, service_subtype, is_enabled, admin_enabled').eq('service_type', inquiry.type),
+                        supabase.from('service_availability').select('service_type, service_subtype, is_enabled').eq('service_type', inquiry.type),
+                        productIds.length > 0
+                            ? supabase.from('partner_products').select('partner_id, product_id').in('product_id', productIds)
+                            : Promise.resolve({ data: [] }),
+                    ]);
+                    for (const res of [availRes, globalRes, assignedRes]) if (res.error) throw res.error;
+                    const rules = { partnerAvailability: availRes.data || [], globalAvailability: globalRes.data || [] };
+                    const carries = (partnerId, productId) =>
+                        (assignedRes.data || []).some((r) => r.partner_id === partnerId && r.product_id === productId);
+                    list = list.filter((p) =>
+                        subtypes.every((sub) => isPartnerServiceEligible(p.id, inquiry.type, sub, rules)) &&
+                        productIds.every((pid) => carries(p.id, pid))
+                    );
+                }
+
+                if (!cancelled) setAssignOptions({ loading: false, partners: list, selected: '', saving: false });
             } catch (err) {
                 console.error('[InquiryDetail] load partners failed:', err);
                 if (!cancelled) setAssignOptions((s) => ({ ...s, loading: false }));
@@ -398,16 +506,19 @@ const InquiryDetail = () => {
 
         loadPartners();
         return () => { cancelled = true; };
-    }, [inquiry?.is_general_inquiry, inquiry?.partner_id]);
+    }, [inquiry?.is_general_inquiry, inquiry?.partner_id, inquiry?.type, customerRequest, items]);
 
     const handleAssignPartner = async () => {
         if (!assignOptions.selected) return;
         setAssignOptions((s) => ({ ...s, saving: true }));
         try {
-            await assignInquiryPartner(inquiry.id, assignOptions.selected);
+            const assigned = await assignInquiryPartner(inquiry.id, assignOptions.selected);
             const { data: partnerData } = await supabase.from('partners').select('*').eq('id', assignOptions.selected).maybeSingle();
-            setInquiry((prev) => ({ ...prev, partner_id: assignOptions.selected, partners: partnerData || null }));
-            toast.success('Partner assigned to this inquiry.');
+            // A customer's Validation is approved on assignment — take the status from the server.
+            setInquiry((prev) => ({ ...prev, partner_id: assignOptions.selected, partners: partnerData || null, status: assigned?.status || prev.status }));
+            toast.success(String(assigned?.status || '').toLowerCase() === 'accepted' && String(inquiry.status || '').toLowerCase() === 'pending'
+                ? 'Partner assigned — the validation is now approved.'
+                : 'Partner assigned to this inquiry.');
         } catch (err) {
             console.error('[InquiryDetail] assign partner failed:', err);
             toast.error(err?.response?.data?.error || err.message || 'Failed to assign partner.');
@@ -523,6 +634,18 @@ const InquiryDetail = () => {
                             <InfoRow icon={CheckCircle} label="Status" value={inquiry.customers.status}
                                 valueClass={inquiry.customers.status === 'Active' ? 'text-emerald-600' : 'text-slate-500'}
                             />
+                            {inquiry.customers.location_lat != null && inquiry.customers.location_lng != null && (
+                                <div className="pt-3">
+                                    <a
+                                        href={`https://www.google.com/maps?q=${inquiry.customers.location_lat},${inquiry.customers.location_lng}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:underline"
+                                    >
+                                        <MapPin size={12} /> View location on map
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <p className="text-sm text-slate-400 py-4 text-center">No customer data.</p>
@@ -554,6 +677,32 @@ const InquiryDetail = () => {
                             <InfoRow icon={CheckCircle} label="Status"   value={inquiry.agents.status}
                                 valueClass={['accepted','active'].includes((inquiry.agents.status||'').toLowerCase()) ? 'text-emerald-600' : 'text-amber-600'}
                             />
+                            {customerRequest && !agentInactive && (
+                                <p className="pt-3 text-xs text-slate-500">Customer request — assigned to this agent.</p>
+                            )}
+                            {agentInactive && (
+                                <div className="pt-3">
+                                    <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
+                                        <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                                        <p className="text-xs font-bold text-amber-800">
+                                            This agent is no longer active. Reassign the inquiry to an active agent.
+                                        </p>
+                                    </div>
+                                    {agentPicker}
+                                </div>
+                            )}
+                        </div>
+                    ) : (customerRequest || agentInactive) ? (
+                        <div className="py-2">
+                            <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
+                                <Inbox size={16} className="text-amber-600 shrink-0" />
+                                <p className="text-xs font-bold text-amber-800">
+                                    {agentInactive
+                                        ? 'The assigned agent no longer exists. Assign an active agent.'
+                                        : 'No agent yet — the customer has no active agent. Assign one.'}
+                                </p>
+                            </div>
+                            {agentPicker}
                         </div>
                     ) : (
                         <p className="text-sm text-slate-400 py-4 text-center">No agent assigned.</p>
@@ -595,11 +744,32 @@ const InquiryDetail = () => {
                                     <Loader2 size={18} className="animate-spin text-slate-400" />
                                 </div>
                             ) : assignOptions.partners.length === 0 ? (
-                                <p className="text-sm text-slate-400 py-4 text-center">
-                                    No Active Partners are available to assign.
-                                </p>
+                                <div className="py-3 text-center space-y-2">
+                                    <p className="text-sm text-slate-400">
+                                        {customerRequest
+                                            ? 'No Partner currently offers this service with the requested product. The request stays with Admin until one is available.'
+                                            : 'No Active Partners are available to assign.'}
+                                    </p>
+                                    {customerRequest && items
+                                        .map((it) => it.products)
+                                        .filter((p, i, all) => p?.id && p.category_id && all.findIndex((x) => x?.id === p.id) === i)
+                                        .map((p) => (
+                                            <Link
+                                                key={p.id}
+                                                to={`/admin/products/${p.category_id}/${p.id}`}
+                                                className="block text-xs font-bold text-primary-600 hover:underline"
+                                            >
+                                                Assign “{p.name}” to a Partner →
+                                            </Link>
+                                        ))}
+                                </div>
                             ) : (
                                 <div className="flex flex-col gap-2">
+                                    {customerRequest && (
+                                        <p className="text-[11px] text-slate-400">
+                                            Showing Partners that offer this service and carry the requested product.
+                                        </p>
+                                    )}
                                     <select
                                         value={assignOptions.selected}
                                         onChange={(e) => setAssignOptions((s) => ({ ...s, selected: e.target.value }))}
@@ -639,7 +809,18 @@ const InquiryDetail = () => {
                     <h3 className="font-bold text-slate-900 mb-4">Inquiry Details</h3>
                     <div className="divide-y divide-slate-50">
                         <InfoRow icon={Hash}         label="Inquiry ID"       value={inquiry.id} valueClass="font-mono text-xs text-slate-600" />
-                        <InfoRow icon={Tag}          label="Inquiry Type"     value={inquiry.type} valueClass="capitalize" />
+                        <InfoRow icon={Tag}          label="Inquiry Type"     value={subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode) ? `${inquiry.type} - ${subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode)}` : inquiry.type} valueClass="capitalize" />
+                        {customerRequest && (
+                            <>
+                                <InfoRow icon={User}     label="Source"           value="Customer request" />
+                                <InfoRow icon={Hash}     label="Internal Ref."    value={inquiry.internal_reference_number} />
+                                {inquiry.customer_document_url && (
+                                    <InfoRow icon={FileText} label="Inquiry Document" value={<a href={inquiry.customer_document_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline break-all">{inquiry.customer_document_name || 'View PDF'}</a>} />
+                                )}
+                                <InfoRow icon={Calendar} label="Preferred Date"   value={inquiry.preferred_date ? new Date(inquiry.preferred_date).toLocaleDateString() : null} />
+                                <InfoRow icon={FileText} label="Customer Notes"   value={inquiry.notes} />
+                            </>
+                        )}
                         <InfoRow icon={Activity}     label="Status"           value={inquiry.status} />
                         <InfoRow icon={AlertCircle}  label="Priority"         value={inquiry.priority} />
                         <InfoRow icon={Calendar}     label="Created Date"     value={inquiry.created_at ? new Date(inquiry.created_at).toLocaleString() : null} />
@@ -715,7 +896,14 @@ const InquiryDetail = () => {
                                     <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
                                         <td className="px-6 py-4 text-sm font-bold text-slate-400">{idx + 1}</td>
                                         <td className="px-6 py-4 text-sm text-slate-900 font-medium">
-                                            {item.description || item.name || item.item_type || '—'}
+                                            {item.description || item.name || item.item_type || item.system_type || item.products?.name || '—'}
+                                            {(item.products || item.catalog_no) && (
+                                                <span className="block text-xs text-slate-400 font-normal">
+                                                    {item.products?.name}
+                                                    {item.products?.model_number && <span className="font-mono"> · Product# {item.products.model_number}</span>}
+                                                    {item.catalog_no && <span className="font-mono"> · CAT# {item.catalog_no}</span>}
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-500 capitalize">
                                             {item.type || item.item_type || '—'}

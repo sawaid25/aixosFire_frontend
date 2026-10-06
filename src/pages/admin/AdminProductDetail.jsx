@@ -145,8 +145,12 @@ const AdminProductDetail = () => {
                             <Tag size={12} /> {category?.name || 'Uncategorized'}
                         </p>
                         <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-900">{product.name}</h1>
-                        {product.model_number && (
-                            <p className="text-sm font-bold text-slate-400 mt-1 font-mono">{product.model_number}</p>
+                        {(product.cat_no || product.model_number) && (
+                            <p className="text-sm font-bold text-slate-400 mt-1 font-mono">
+                                {product.cat_no && <span className="text-primary-500">CAT No {product.cat_no}</span>}
+                                {product.cat_no && product.model_number && ' · '}
+                                {product.model_number}
+                            </p>
                         )}
                         <p className="text-slate-600 mt-4 leading-relaxed">
                             {product.description || 'No description provided.'}

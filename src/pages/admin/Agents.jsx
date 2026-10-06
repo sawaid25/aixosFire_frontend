@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Check, X, User, Phone, MapPin, FileText, Shield, Pause, Eye, MessageSquare, BarChart2 } from 'lucide-react';
 import PageLoader from '../../components/PageLoader';
 import { AGENT_STATUS } from '../../constants/agentApprovalStatus';
+import { updateAgentStatus } from '../../api/admin';
 
 const TABS = [
     { value: AGENT_STATUS.PENDING, label: 'Pending' },
@@ -75,7 +76,8 @@ const AgentManagement = () => {
     }, [fetchAgents]);
 
     /**
-     * Equivalent to PATCH /agents/:id/status — implemented via Supabase.
+     * PATCH /admin/agents/:id/status — the backend also routes an Agent's open
+     * inquiries to Admin when they stop being active (hold / rejected).
      */
     const setAgentStatus = async (id, nextStatus, { confirmReject = true } = {}) => {
         if (nextStatus === AGENT_STATUS.HOLD) {
@@ -84,25 +86,16 @@ const AgentManagement = () => {
             if (!window.confirm('Are you sure you want to reject this agent?')) return;
         }
 
-        console.log(id, nextStatus);
         try {
-            const { data, error } = await supabase
-                .from('agents')
-                .update({ status: nextStatus })
-                .eq('id', id)
-                .select()
-                .maybeSingle();
-
-            if (error) throw error;
-            if (!data) {
-                console.warn('No row updated — check id and RLS policies for agents');
-                alert('Update failed: no row returned. Check agent id and database permissions.');
-                return;
+            const result = await updateAgentStatus(id, nextStatus);
+            const routed = result?.routed_to_admin || [];
+            if (routed.length > 0) {
+                alert(`${routed.length} open ${routed.length === 1 ? 'inquiry was' : 'inquiries were'} sent to Admin for reassignment (Inquiries → Needs Agent).`);
             }
             await fetchAgents();
         } catch (err) {
             console.error('setAgentStatus', err);
-            alert(`Failed to update agent: ${err.message || err}`);
+            alert(`Failed to update agent: ${err?.response?.data?.error || err.message || err}`);
         }
     };
 

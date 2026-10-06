@@ -156,5 +156,8 @@ export const buildValidationInquiryViewModel = (inquiry) => {
         customerAddress: customers.address || inquiry.customer_address || null,
         customerLocationLat: customers.location_lat ?? null,
         customerLocationLng: customers.location_lng ?? null,
+        // Requested directly by the customer (Admin assigned this Partner) — uses the
+        // Pending -> Accepted -> Completed lifecycle (no separate In Progress step).
+        isCustomerRequest: String(inquiry.performed_by || '').trim().toLowerCase() === 'customer',
     };
 };

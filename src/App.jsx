@@ -27,6 +27,7 @@ import InventoryPage from './pages/customer/Inventory';
 import HistoryPage from './pages/customer/History';
 import CertificatesPage from './pages/customer/Certificates';
 import CustomerComplaintPage from './pages/customer/ComplaintPage';
+import CustomerInquiryDetail from './pages/customer/InquiryDetail';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
@@ -132,6 +133,7 @@ function App() {
                   <Route path="booking" element={<BookingPage />} />
                   <Route path="inventory" element={<InventoryPage />} />
                   <Route path="history" element={<HistoryPage />} />
+                  <Route path="inquiries/:id" element={<CustomerInquiryDetail />} />
                   <Route path="certificates" element={<CertificatesPage />} />
                   <Route path="complaint" element={<CustomerComplaintPage />} />
                 </Routes>

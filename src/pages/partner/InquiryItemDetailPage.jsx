@@ -229,7 +229,8 @@ const InquiryItemDetailPage = () => {
             setQuotation(null);
             return;
         }
-        const isMaint = (inquiry.type || inquiry.inquiry_type || '').toString().trim().toLowerCase() === 'maintenance';
+        // Maintenance and New Unit share the site-assessment / inspection / quotation workflow.
+        const isMaint = ['maintenance', 'new unit'].includes((inquiry.type || inquiry.inquiry_type || '').toString().trim().toLowerCase());
         const acc = (inquiry.status || '').toLowerCase() === 'accepted';
         if (!isMaint || !acc) {
             setSiteAssessment(null);
@@ -412,6 +413,9 @@ const InquiryItemDetailPage = () => {
     const isNewUnitInquiry = inquiryTypeKey === 'new unit';
     const isRefilledInquiry = inquiryTypeKey === 'refill' || inquiryTypeKey === 'refilled';
     const isInquiryAccepted = (inquiry.status || '').toLowerCase() === 'accepted';
+    // New Unit follows the same partner workflow as Maintenance: a single Accept (no
+    // delivery choice), then site assessment, inspection reports, visit and quotation.
+    const hasSiteWorkflow = isMaintenanceInquiry || isNewUnitInquiry;
     // Partner Chat Management — see the chatSettings effect above. `chatService` is null (and
     // both chat triggers behave exactly as before) for anything other than Maintenance/New Unit.
     const chatService = isMaintenanceInquiry ? 'Maintenance' : isNewUnitInquiry ? 'New Unit' : null;
@@ -853,7 +857,7 @@ const InquiryItemDetailPage = () => {
                     </div>
 
                     {/* Technical Documentation (Maintenance) */}
-                    {isMaintenanceInquiry && isInquiryAccepted && (
+                    {hasSiteWorkflow && isInquiryAccepted && (
                         <div className="border-t border-slate-100 pt-10">
                             <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <FileText size={16} />
@@ -1010,18 +1014,18 @@ const InquiryItemDetailPage = () => {
 
                 </div>
 
-                {isInquiryPending && (isRefilledInquiry || isMaintenanceInquiry) && (
+                {isInquiryPending && (isRefilledInquiry || hasSiteWorkflow) && (
                     <div className="lg:sticky lg:top-8 self-start w-full lg:w-[360px]">
                         <PartnerActionCard
                             onAccept={() => handleStatusUpdate('accepted', { delivery_mode: 'agent' })}
                             onAcceptWithDelivery={() => setIsDeliveryModalOpen(true)}
                             onReject={() => handleStatusUpdate('rejected')}
                             disabled={actionLoading}
-                            isInMaintenance={isMaintenanceInquiry}
+                            isInMaintenance={hasSiteWorkflow}
                         />
                     </div>
                 )}
-                {isMaintenanceInquiry && isInquiryAccepted && (
+                {hasSiteWorkflow && isInquiryAccepted && (
                     <div className="lg:sticky lg:top-8 self-start flex flex-col gap-6 w-full lg:w-[360px]">
                         <PartnerPostAcceptCard
                             inquiryId={inquiryId}
@@ -1050,7 +1054,7 @@ const InquiryItemDetailPage = () => {
                         )}
                     </div>
                 )}
-                {!isMaintenanceInquiry && isInquiryAccepted && (
+                {!hasSiteWorkflow && isInquiryAccepted && (
                     <div className="lg:sticky lg:top-8 self-start flex flex-col gap-6 w-full lg:w-[360px]">
                         {showCustomerChat && (
                             <InquiryChatBox
@@ -1086,7 +1090,7 @@ const InquiryItemDetailPage = () => {
                 inquiryId={inquiryId}
                 inquiryNo={inquiry.inquiry_no}
                 onSuccess={async () => {
-                    if (!isMaintenanceInquiry || !isInquiryAccepted) return;
+                    if (!hasSiteWorkflow || !isInquiryAccepted) return;
                     try {
                         const r = await fetchInspectionReportsByInquiryId(inquiryId);
                         setInspectionReports(Array.isArray(r) ? r : []);

@@ -9,9 +9,10 @@ import {
 import {
     Users, DollarSign, Activity, AlertCircle, CheckCircle,
     UserPlus, Handshake, BarChart2, ArrowRight, ArrowUpRight,
-    MessageSquare, FileText, TrendingUp, Eye, Clock
+    MessageSquare, FileText, TrendingUp, Eye, Clock, Inbox
 } from 'lucide-react';
 import StatCard from '../../components/admin/StatCard';
+import { subtypeOnlyLabel } from '../../utils/productPartnerEligibility';
 
 const SERVICE_PRICING = { inspection: 50, refilling: 65, installation: 150, validation: 45, maintenance: 80 };
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -164,6 +165,87 @@ const QuotationCard = ({ totalValue, totalQuotations, wonCount }) => (
 
 /* ------------------------------------------------ */
 
+/** "Validation - Follow-up" style label from the first item's sub-type. */
+const requestTypeLabel = (inq) => {
+    const sub = subtypeOnlyLabel(inq.type, inq.inquiry_items?.[0]?.validation_mode);
+    return sub ? `${inq.type} - ${sub}` : inq.type || '—';
+};
+
+/**
+ * Customer requests awaiting Partner assignment — every customer-created inquiry lands
+ * here first (Admin-first workflow). "Assign" opens the inquiry, where Admin picks an
+ * eligible Partner.
+ */
+const CustomerRequestsPanel = ({ requests }) => {
+    const shown = requests.slice(0, 6);
+    return (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
+            <div className="flex items-center justify-between mb-5 gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-sky-50">
+                        <Inbox size={18} className="text-sky-600" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                            Customer Requests
+                            {requests.length > 0 && (
+                                <span className="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[11px] font-bold">{requests.length}</span>
+                            )}
+                        </h3>
+                        <p className="text-xs text-slate-400">Awaiting partner assignment</p>
+                    </div>
+                </div>
+                <Link to="/admin/general-inquiries?source=customer" className="text-xs font-bold text-primary-600 hover:underline flex items-center gap-1 shrink-0">
+                    Manage all <ArrowRight size={12} />
+                </Link>
+            </div>
+            {shown.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">No customer requests are waiting for assignment.</p>
+            ) : (
+                <div className="space-y-1">
+                    {shown.map((inq) => {
+                        const product = (inq.inquiry_items || []).find((it) => it.products || it.catalog_no);
+                        return (
+                            <div key={inq.id} className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-bold text-slate-900 truncate">
+                                        {inq.inquiry_no || `#${inq.id?.toString().slice(-6)}`}
+                                        <span className="ml-2 font-medium text-slate-500">{requestTypeLabel(inq)}</span>
+                                    </p>
+                                    <p className="text-xs text-slate-400 truncate">
+                                        {inq.customers?.business_name || 'Customer'}
+                                        {' · '}
+                                        {inq.agents?.name ? `Agent: ${inq.agents.name}` : 'Needs agent assignment'}
+                                        {product && (
+                                            <>
+                                                {' · '}
+                                                {[product.products?.name, product.products?.model_number ? `Product# ${product.products.model_number}` : null, product.catalog_no ? `CAT# ${product.catalog_no}` : null].filter(Boolean).join(' · ')}
+                                            </>
+                                        )}
+                                        {' · '}
+                                        {new Date(inq.created_at).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <Link
+                                    to={`/admin/inquiries/${inq.id}`}
+                                    className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors"
+                                >
+                                    <Handshake size={12} /> Assign
+                                </Link>
+                            </div>
+                        );
+                    })}
+                    {requests.length > shown.length && (
+                        <Link to="/admin/general-inquiries?source=customer" className="block text-center text-xs font-bold text-primary-600 hover:underline pt-2">
+                            +{requests.length - shown.length} more
+                        </Link>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AdminDashboard = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -181,6 +263,7 @@ const AdminDashboard = () => {
                     { data: recentInquiries },
                     { data: agentsData },
                     { data: quotationsData },
+                    { data: customerRequests },
                 ] = await Promise.all([
                     supabase.from('agents').select('*', { count: 'exact', head: true }),
                     supabase.from('agents').select('*', { count: 'exact', head: true }).or('status.ilike.accepted,status.ilike.active'),
@@ -194,6 +277,13 @@ const AdminDashboard = () => {
                         .limit(6),
                     supabase.from('agents').select('id,name').or('status.ilike.accepted,status.ilike.active'),
                     supabase.from('quotations').select('estimated_cost, inquiries(status)'),
+                    // Customer requests waiting for Admin to assign a Partner (Admin-first workflow).
+                    supabase.from('inquiries')
+                        .select('id,inquiry_no,type,status,created_at,customer_id,agent_id,customers(business_name),agents(name),inquiry_items(validation_mode,catalog_no,products(name,model_number))')
+                        .eq('performed_by', 'Customer')
+                        .eq('is_general_inquiry', true)
+                        .is('partner_id', null)
+                        .order('created_at', { ascending: false }),
                 ]);
 
                 const list = inquiries || [];
@@ -280,6 +370,7 @@ const AdminDashboard = () => {
                     totalQuotedValue,
                     totalQuotations: quotationsList.length,
                     wonQuotationsCount,
+                    customerRequests: customerRequests || [],
                 });
             } catch (err) {
                 console.error('Dashboard load error:', err);
@@ -310,6 +401,8 @@ const AdminDashboard = () => {
                     </Link>
                 </div>
             </div>
+
+            <CustomerRequestsPanel requests={data?.customerRequests || []} />
 
             {/* KPI Row 1 */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

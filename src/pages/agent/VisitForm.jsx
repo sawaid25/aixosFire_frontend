@@ -2304,13 +2304,16 @@ const VisitForm = () => {
             licenseDocUrl = await uploadLicenseDocument(item.licensePhoto, idx);
           }
 
+          // Type/Capacity inputs aren't shown for New Unit / Maintenance, so don't send their hidden defaults.
+          const hasTypeCapacity = !['New Unit', 'Maintenance'].includes(item.mode);
+
           // 1. Map the Main Unit of this block
           if (item.mode !== 'New Unit' && (item.material || item.firefightingSystem || item.type)) {
             allItemsPayload.push({
               serial_no: globalSerialNo++,
-              type: item.type || null,
+              type: hasTypeCapacity ? (item.type || null) : null,
               system_type: item.material || null,
-              capacity: item.capacity || null,
+              capacity: hasTypeCapacity ? (item.capacity || null) : null,
               quantity: item.quantity || 1,
               price: item.price || 180,
               unit: item.unit || 'Pieces',
@@ -2350,9 +2353,9 @@ const VisitForm = () => {
 
               allItemsPayload.push({
                 serial_no: globalSerialNo++,
-                type: item.type || null,
+                type: hasTypeCapacity ? (item.type || null) : null,
                 system_type: sub.material || null,
-                capacity: item.capacity || null,
+                capacity: hasTypeCapacity ? (item.capacity || null) : null,
                 quantity: sub.quantity || 1,
                 price: subPrice,
                 unit: sub.unit || 'Pieces',
@@ -3087,7 +3090,7 @@ const VisitForm = () => {
 
                 {/* Type & Capacity Fields */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pb-6">
-                  {ext.mode !== 'Maintenance' && (
+                  {!['New Unit', 'Maintenance'].includes(ext.mode) && (
                     <>
                       <div>
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Type</label>

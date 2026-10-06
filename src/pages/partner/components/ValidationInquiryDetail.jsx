@@ -100,6 +100,7 @@ const ValidationInquiryDetail = ({
         customerAddress,
         customerLocationLat,
         customerLocationLng,
+        isCustomerRequest,
     } = viewModel;
 
     const [expandedRow, setExpandedRow] = useState(null);
@@ -197,7 +198,7 @@ const ValidationInquiryDetail = ({
                         <div>
                             <h3 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-3">
                                 <FileText size={22} className="text-primary-500" />
-                                Agent Inquiry Details
+                                {isCustomerRequest ? 'Customer Request Details' : 'Agent Inquiry Details'}
                             </h3>
                             <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -214,7 +215,7 @@ const ValidationInquiryDetail = ({
                                 </div>
 
                                 <div className="mt-8 pt-6 border-t border-slate-100">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Agent Notes</p>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{isCustomerRequest ? 'Customer Notes' : 'Agent Notes'}</p>
                                     <p className="text-slate-600 leading-relaxed italic">
                                         {agentNotes ? `"${agentNotes}"` : 'No notes provided.'}
                                     </p>
@@ -228,7 +229,9 @@ const ValidationInquiryDetail = ({
                         <div className={`border p-7 rounded-3xl sticky top-6 ${cardClass}`}>
                             <h4 className={`font-bold text-lg mb-3 ${textClass}`}>Status: {statusLabel}</h4>
                             <p className={`text-sm leading-relaxed opacity-80 ${textClass}`}>
-                                This inquiry has been verified by the agent and assigned to your dashboard for validation.
+                                {isCustomerRequest
+                                    ? 'This validation was requested by the customer and assigned to you by Admin.'
+                                    : 'This inquiry has been verified by the agent and assigned to your dashboard for validation.'}
                             </p>
 
                             {(statusKey === 'pending' || statusKey === 'accepted' || statusKey === 'in_progress') && (
@@ -255,7 +258,18 @@ const ValidationInquiryDetail = ({
                                             </button>
                                         </>
                                     )}
-                                    {statusKey === 'accepted' && (
+                                    {statusKey === 'accepted' && isCustomerRequest && (
+                                        <button
+                                            type="button"
+                                            onClick={onComplete}
+                                            disabled={actionLoading || !onComplete}
+                                            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                        >
+                                            {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                            Mark Complete
+                                        </button>
+                                    )}
+                                    {statusKey === 'accepted' && !isCustomerRequest && (
                                         <button
                                             type="button"
                                             onClick={onStartWork}

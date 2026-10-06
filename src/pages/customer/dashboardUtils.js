@@ -2,34 +2,85 @@
  * Normalize inquiry / service / equipment rows for unified Customer service history table.
  */
 
+import { inquiryTypeLabel } from '../../utils/productPartnerEligibility';
+
 export const formatDateSafe = (v) => {
     if (v == null || v === '') return '—';
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
 };
 
+const agentNameOf = (inquiry) =>
+    inquiry?.agents?.name ||
+    inquiry?.agent?.name ||
+    inquiry?.agent_name ||
+    null;
+
+const partnerNameOf = (inquiry) =>
+    inquiry?.partners?.business_name ||
+    inquiry?.partner?.business_name ||
+    inquiry?.partner_name ||
+    null;
+
+// Never renders raw ids — falls back to the role label when the name is unknown.
 export const performedByLabel = (inquiry) => {
+    const agent = agentNameOf(inquiry);
+    const partner = partnerNameOf(inquiry);
+
     // New logic based on the explicit performed_by column
     const pb = (inquiry?.performed_by || '').toString().trim();
-    if (pb === 'Agent') return `Agent: ${inquiry.agent_id || '—'}`;
-    if (pb === 'Assigned Partner') return 'Partner';
+    if (pb === 'Agent') return agent ? `Agent: ${agent}` : 'Agent';
+    if (pb === 'Assigned Partner') return partner ? `Partner: ${partner}` : 'Partner';
     if (pb === 'Customer') return 'Customer';
 
     // Legacy fallback logic
-    const agent =
-        inquiry?.agents?.name ||
-        inquiry?.agent?.name ||
-        inquiry?.agent_name ||
-        null;
-    const partner =
-        inquiry?.partners?.business_name ||
-        inquiry?.partner?.business_name ||
-        inquiry?.partner_name ||
-        null;
     if (agent && partner) return `${agent} / ${partner}`;
     if (agent) return `Agent: ${agent}`;
     if (partner) return `Partner: ${partner}`;
     return '—';
+};
+
+/**
+ * "Validation - License Renewal" style label. The sub-type lives on the items, so an
+ * inquiry with no items (older rows) shows its plain type rather than guessing one.
+ */
+export const inquiryTypeDisplay = (inquiry) => {
+    const type = (inquiry?.type || inquiry?.inquiry_type || '').toString().trim();
+    if (!type) return '—';
+    const items = Array.isArray(inquiry?.inquiry_items) ? inquiry.inquiry_items : [];
+    return items.length > 0 ? inquiryTypeLabel(type, items[0]?.validation_mode) : type;
+};
+
+/**
+ * Product summary of an inquiry's first catalog-linked item, e.g.
+ * { name: 'Smoke Alarm', productNo: '205 DC', catNo: 'CAT-1042', more: 1 } — null when
+ * no item references a product or a CAT#.
+ */
+export const inquiryProductSummary = (inquiry) => {
+    const items = Array.isArray(inquiry?.inquiry_items) ? inquiry.inquiry_items : [];
+    const withProduct = items.filter((it) => it?.products || it?.catalog_no);
+    if (withProduct.length === 0) return null;
+    const first = withProduct[0];
+    return {
+        name: first.products?.name || first.system_type || null,
+        productNo: first.products?.model_number || null,
+        catNo: first.catalog_no || null,
+        more: withProduct.length - 1
+    };
+};
+
+/**
+ * Assigned Partner for display: { name, phone, email } when assigned, otherwise a
+ * status message ({ pendingLabel }) — General Inquiries wait on Admin assignment.
+ */
+export const assignedPartnerInfo = (inquiry) => {
+    const name = partnerNameOf(inquiry);
+    if (inquiry?.partner_id && name) {
+        const p = inquiry.partners || inquiry.partner || {};
+        return { name, phone: p.phone || null, email: p.email || null };
+    }
+    if (inquiry?.partner_id) return { name: 'Assigned Partner', phone: null, email: null };
+    return { pendingLabel: inquiry?.is_general_inquiry ? 'Pending admin assignment' : 'Not assigned yet' };
 };
 
 export const inquiryExpiry = (inquiry) =>
@@ -128,8 +179,9 @@ export const normalizeCustomerInquiries = (raw) => {
 
 export const buildHistoryRowsFromInquiry = (inquiry) => ({
     id: `inq-${inquiry.id}`,
+    inquiryId: inquiry.id,
     source: 'inquiry',
-    serviceType: inquiry.type || inquiry.inquiry_type || '—',
+    serviceType: inquiryTypeDisplay(inquiry),
     serviceDate: inquiry.created_at || inquiry.updated_at,
     expiryDate: inquiryExpiry(inquiry),
     performedBy: performedByLabel(inquiry),
@@ -212,6 +264,22 @@ export const buildInquiryTimeline = ({ inquiry, quotations = [], services = [] }
             key: `ext-${e?.id ?? e?.extension_id ?? idx}`,
             label: raw,
             ts: e?.updated_at || e?.created_at || null
+        });
+    });
+
+    // Site assessment (one per inquiry) and inspection reports
+    toArray(inquiry?.site_assessments).forEach((sa, idx) => {
+        events.push({
+            key: `sa-${sa?.inquiry_id ?? idx}`,
+            label: 'Site Assessment Submitted',
+            ts: sa?.created_at || sa?.updated_at || null
+        });
+    });
+    toArray(inquiry?.inspection_reports).forEach((r, idx) => {
+        events.push({
+            key: `ir-${r?.id ?? idx}`,
+            label: r?.report_title ? `Inspection Report: ${r.report_title}` : 'Inspection Report Uploaded',
+            ts: r?.created_at || r?.inspection_date || null
         });
     });
 

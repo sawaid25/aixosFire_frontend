@@ -212,7 +212,7 @@ const AgentDashboard = () => {
           .from('inquiries')
           .select(`
             id, inquiry_no, type, status, priority, created_at, updated_at,
-            visits!inner (id, visit_date, last_updated_follow_up_date, agent_id)
+            visits (id, visit_date, last_updated_follow_up_date, agent_id)
           `)
           .eq('agent_id', user.id)
           .order('created_at', { ascending: false });
