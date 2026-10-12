@@ -5,13 +5,14 @@ import {
     ArrowLeft, User, Activity, Eye, Clock, Calendar,
     CheckCircle, XCircle, AlertTriangle
 } from 'lucide-react';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 /* ─── Helpers ────────────────────────────────── */
 const startOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
 const startOfWeek  = (d = new Date()) => { const x = startOfDay(d); x.setDate(x.getDate() - x.getDay()); return x; };
 const startOfMonth = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), 1);
 
-const fmtFull = (d) => d ? new Date(d).toLocaleString() : '—';
+const fmtFull = (d) => d ? formatKsaDateTime(d) : '—';
 
 const getBadgeClass = (s) => {
     const v = (s || '').toLowerCase();

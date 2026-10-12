@@ -9,6 +9,7 @@ import {
     sendUserComplaint
 } from '../../api/complaintsApi';
 import { aiService } from '../../services/ai.service';
+import { formatKsaTime } from '../../utils/dateTime';
 
 const ComplaintChat = ({ userId, userRole, isAdminView = false }) => {
     const threadUserId = userId == null ? '' : String(userId).trim();
@@ -192,8 +193,7 @@ const ComplaintChat = ({ userId, userRole, isAdminView = false }) => {
     };
 
     const formatTime = (value) => {
-        const d = new Date(value);
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return formatKsaTime(value);
     };
 
     return (

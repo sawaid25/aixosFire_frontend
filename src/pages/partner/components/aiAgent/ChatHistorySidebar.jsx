@@ -1,5 +1,6 @@
 import React from 'react';
 import { MessageSquare, Calendar, Trash2, X, Plus } from 'lucide-react';
+import { formatKsaTime } from '../../../../utils/dateTime';
 
 const ChatHistorySidebar = ({ sessions, onSelectChat, selectedChatId, onClearHistory, onNewChat, isOpen, onClose }) => {
   const groupedSessions = sessions.reduce((acc, session) => {
@@ -93,7 +94,7 @@ const ChatHistorySidebar = ({ sessions, onSelectChat, selectedChatId, onClearHis
                       {preview}
                     </p>
                     <span className="text-[10px] opacity-60 mt-1 block font-medium">
-                      {new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatKsaTime(session.created_at)}
                       {msgCount > 0 && ` · ${msgCount} messages`}
                     </span>
                   </button>

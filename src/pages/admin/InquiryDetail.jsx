@@ -17,6 +17,7 @@ import {
     QrCode, Package, ChevronRight, Hash,
     AlertTriangle, TrendingUp, TrendingDown, Target, Timer, Eye, X, Loader2, Inbox
 } from 'lucide-react';
+import { formatKsaDateTime, formatKsaTime } from '../../utils/dateTime';
 
 const SERVICE_PRICING = {
     inspection: 50, refilling: 65, installation: 150,
@@ -72,7 +73,7 @@ const calcBenchmark = (inq) => {
 };
 
 const fmt     = (d) => d ? new Date(d).toLocaleDateString()  : '—';
-const fmtTime = (d) => d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const fmtTime = (d) => d ? formatKsaTime(d) : '';
 
 /* ─── Benchmark Status Pill ─────────────────────────── */
 const BmPill = ({ status }) => {
@@ -165,7 +166,7 @@ const TimelineEvent = ({ icon: Icon, color, label, date, last }) => (
             <p className="text-sm font-bold text-slate-900">{label}</p>
             {date && (
                 <p className="text-xs text-slate-400 mt-0.5">
-                    {new Date(date).toLocaleString()}
+                    {formatKsaDateTime(date)}
                 </p>
             )}
         </div>
@@ -217,10 +218,10 @@ const ItemDetailPanel = ({ item, onClose }) => {
             value: new Date(item.last_service_date).toLocaleDateString(),
             icon: Calendar,
         },
-        { label: 'Created',       value: new Date(item.created_at).toLocaleString(),  icon: Calendar },
+        { label: 'Created',       value: formatKsaDateTime(item.created_at),  icon: Calendar },
         item.updated_at && {
             label: 'Last Updated',
-            value: new Date(item.updated_at).toLocaleString(),
+            value: formatKsaDateTime(item.updated_at),
             icon: Clock,
         },
     ].filter(Boolean);
@@ -823,10 +824,10 @@ const InquiryDetail = () => {
                         )}
                         <InfoRow icon={Activity}     label="Status"           value={inquiry.status} />
                         <InfoRow icon={AlertCircle}  label="Priority"         value={inquiry.priority} />
-                        <InfoRow icon={Calendar}     label="Created Date"     value={inquiry.created_at ? new Date(inquiry.created_at).toLocaleString() : null} />
-                        <InfoRow icon={Clock}        label="Follow-up Date"   value={inquiry.follow_up_date ? new Date(inquiry.follow_up_date).toLocaleString() : null} />
+                        <InfoRow icon={Calendar}     label="Created Date"     value={inquiry.created_at ? formatKsaDateTime(inquiry.created_at) : null} />
+                        <InfoRow icon={Clock}        label="Follow-up Date"   value={inquiry.follow_up_date ? formatKsaDateTime(inquiry.follow_up_date) : null} />
                         {inquiry.updated_at && (
-                            <InfoRow icon={CheckCircle} label="Last Updated"  value={new Date(inquiry.updated_at).toLocaleString()} />
+                            <InfoRow icon={CheckCircle} label="Last Updated"  value={formatKsaDateTime(inquiry.updated_at)} />
                         )}
                     </div>
                 </div>

@@ -50,6 +50,7 @@ import {
     scheduleMaintenanceVisit,
     fetchQuotationByInquiryId
 } from '../../api/maintenanceApi';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 const statusBadgeClass = (status) => {
     const s = (status || '').toLowerCase();
@@ -68,10 +69,7 @@ const formatVal = (v) => {
 const formatDateTime = (iso) => {
     if (!iso) return '—';
     try {
-        return new Date(iso).toLocaleString(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short'
-        });
+        return formatKsaDateTime(iso) || formatVal(iso);
     } catch {
         return formatVal(iso);
     }

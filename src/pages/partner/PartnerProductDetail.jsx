@@ -1,11 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
     ArrowLeft, Tag, PackageOpen, AlertCircle, RefreshCw, ShieldCheck,
-    Calendar, Hash, Boxes, CircleDot,
+    Calendar, Hash, Boxes, CircleDot, FileDown, Loader2, Barcode,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import usePartnerProducts from '../../hooks/usePartnerProducts';
 import ProductImage from '../../components/products/ProductImage';
+import { useAuth } from '../../context/AuthContext';
+import { downloadProductPdf } from './utils/productPdf';
 
 const InfoRow = ({ icon, label, children }) => {
     const Icon = icon;
@@ -23,6 +26,8 @@ const InfoRow = ({ icon, label, children }) => {
 const PartnerProductDetail = () => {
     const { categoryId, productId } = useParams();
     const { products, loading, error, reload } = usePartnerProducts();
+    const { user } = useAuth();
+    const [generatingPdf, setGeneratingPdf] = useState(false);
 
     const product = useMemo(
         () => products.find((p) => String(p.id) === String(productId)) || null,
@@ -97,6 +102,20 @@ const PartnerProductDetail = () => {
         );
     }
 
+    const handleGeneratePdf = async () => {
+        setGeneratingPdf(true);
+        try {
+            await downloadProductPdf(product, {
+                partnerName: user?.business_name || user?.owner_name || user?.name || null,
+            });
+        } catch (err) {
+            console.error('[PartnerProductDetail] PDF generation failed:', err);
+            toast.error('Could not generate the PDF. Please try again.');
+        } finally {
+            setGeneratingPdf(false);
+        }
+    };
+
     const specEntries = product.specifications && typeof product.specifications === 'object'
         ? Object.entries(product.specifications)
         : [];
@@ -109,7 +128,18 @@ const PartnerProductDetail = () => {
         <div className="space-y-6">
             {backLink}
 
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Product Details</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Product Details</p>
+                <button
+                    type="button"
+                    onClick={handleGeneratePdf}
+                    disabled={generatingPdf}
+                    className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all"
+                >
+                    {generatingPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                    {generatingPdf ? 'Generating…' : 'Generate PDF'}
+                </button>
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Image */}
@@ -145,6 +175,9 @@ const PartnerProductDetail = () => {
                         <h2 className="font-bold text-slate-900 px-6 md:px-8 pt-6 pb-3">Product Information</h2>
                         <div className="divide-y divide-slate-100 border-t border-slate-100">
                             <InfoRow icon={Boxes} label="Category">{product.category || 'Uncategorized'}</InfoRow>
+                            {product.cat_no && (
+                                <InfoRow icon={Barcode} label="CAT No">{product.cat_no}</InfoRow>
+                            )}
                             <InfoRow icon={Hash} label="Model Number">
                                 {product.model_number || <span className="text-slate-400 italic font-normal">Not specified</span>}
                             </InfoRow>

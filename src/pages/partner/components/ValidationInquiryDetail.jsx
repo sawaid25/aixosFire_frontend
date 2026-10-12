@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, Calendar, MapPin, Tag, User, MessageCircle, ChevronDown, ChevronUp, Mic, CheckCircle2, XCircle, PlayCircle, Loader2, ShieldCheck } from 'lucide-react';
 import CustomerContactSection from './CustomerContactSection';
+import { formatKsaDateTime } from '../../../utils/dateTime';
 
 const STATUS_CARD_STYLE = {
     pending: 'bg-amber-50 border-amber-100',
@@ -33,7 +34,7 @@ const VALIDATION_MODE_LABEL = {
 };
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleDateString() : null);
-const fmtDateTime = (value) => (value ? new Date(value).toLocaleString() : null);
+const fmtDateTime = (value) => (value ? formatKsaDateTime(value) : null);
 
 const getStatusBadgeClass = (status) => {
     const v = (status || '').toLowerCase();

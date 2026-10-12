@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
+import { formatKsaDateTime, formatKsaTime } from '../../utils/dateTime';
 
 /* ─── Benchmark Configuration ─────────────────────────── */
 const BENCHMARK = {
@@ -101,7 +102,7 @@ const getBadgeClass = (s) => {
 };
 
 const fmt = (date) => date ? new Date(date).toLocaleDateString() : '—';
-const fmtFull = (date) => date ? new Date(date).toLocaleString() : '—';
+const fmtFull = (date) => date ? formatKsaDateTime(date) : '—';
 
 /* ─── Benchmark Status Pill ────────────────────────────── */
 const BmPill = ({ status }) => {
@@ -1119,7 +1120,7 @@ const AgentProfile = () => {
                                                     <div className="bg-slate-50 rounded-xl p-3">
                                                         <p className="text-xs text-slate-400 font-semibold mb-1">Start Date</p>
                                                         <p className="text-xs font-bold text-slate-700">{fmt(inq.created_at)}</p>
-                                                        <p className="text-xs text-slate-400 mt-0.5">{new Date(inq.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                        <p className="text-xs text-slate-400 mt-0.5">{formatKsaTime(inq.created_at)}</p>
                                                     </div>
                                                     <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
                                                         <p className="text-xs text-amber-600 font-semibold mb-1">Benchmark Date</p>
@@ -1277,7 +1278,7 @@ const AgentProfile = () => {
                                                                         {c.is_bot ? 'Bot' : c.is_admin ? 'Admin' : (agent.name || 'Agent')}
                                                                     </span>
                                                                     <span className="text-[10px] text-slate-400">
-                                                                        {new Date(c.created_at).toLocaleString()}
+                                                                        {formatKsaDateTime(c.created_at)}
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{c.message}</p>

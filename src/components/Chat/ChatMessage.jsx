@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { formatKsaTime } from '../../utils/dateTime';
 
 const ChatMessage = ({ message, isFromCurrentUser }) => {
     const { content, created_at, sender_id, sender_type, isOptimistic } = message;
@@ -12,10 +13,7 @@ const ChatMessage = ({ message, isFromCurrentUser }) => {
         : (user && sender_type === user.role);
 
     // Format timestamp
-    const timestamp = new Date(created_at).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    const timestamp = formatKsaTime(created_at);
 
     const senderName = sender_type === 'customer' ? `Customer #${sender_id}` :
         sender_type === 'partner' ? `Partner #${sender_id}` :

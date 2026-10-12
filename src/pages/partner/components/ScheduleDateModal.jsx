@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
+import { ksaInputToIso, KSA_TIME_LABEL } from '../../../utils/dateTime';
 
 const ScheduleDateModal = ({ isOpen, onClose, onSchedule }) => {
     const [date, setDate] = useState('');
@@ -11,7 +12,7 @@ const ScheduleDateModal = ({ isOpen, onClose, onSchedule }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const isoDate = new Date(date).toISOString();
+            const isoDate = ksaInputToIso(date); // the field is Saudi time (AST)
             await onSchedule(isoDate);
             onClose();
         } catch (error) {
@@ -42,7 +43,7 @@ const ScheduleDateModal = ({ isOpen, onClose, onSchedule }) => {
                 <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1">
                     <div className="mb-6">
                         <label htmlFor="scheduled_date" className="block text-sm font-bold text-slate-700 mb-2">
-                            Select Date & Time <span className="text-red-500">*</span>
+                            Select Date & Time ({KSA_TIME_LABEL}) <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="datetime-local"

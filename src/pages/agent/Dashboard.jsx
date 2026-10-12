@@ -10,6 +10,7 @@ import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import ChatModal from '../../components/Chat/ChatModal';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 let DefaultIcon = L.icon({
   iconUrl: icon,
@@ -551,7 +552,7 @@ const AgentDashboard = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {customer.created_at ? new Date(customer.created_at).toLocaleString() : '—'}
+                      {customer.created_at ? formatKsaDateTime(customer.created_at) : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}
@@ -611,7 +612,7 @@ const AgentDashboard = () => {
                   <MapPin size={14} className="text-slate-400" /> {customer.address || 'N/A'}
                 </div>
                 <div className="text-xs text-slate-400 mt-2">
-                  Created: {customer.created_at ? new Date(customer.created_at).toLocaleString() : '—'}
+                  Created: {customer.created_at ? formatKsaDateTime(customer.created_at) : '—'}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                   Last visit: {customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : '—'}

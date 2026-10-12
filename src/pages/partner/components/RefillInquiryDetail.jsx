@@ -6,6 +6,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { finalizeRefillAcceptance } from '../../../api/partnerRefill';
 import CustomerContactSection from './CustomerContactSection';
 import InquiryChatBox from '../../../components/Chat/InquiryChatBox';
+import { formatKsaDateTime } from '../../../utils/dateTime';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -78,13 +79,13 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
     try {
-      return new Date(dateStr).toLocaleDateString(undefined, {
+      return formatKsaDateTime(dateStr, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      });
+      }) || dateStr;
     } catch (e) {
       return dateStr;
     }

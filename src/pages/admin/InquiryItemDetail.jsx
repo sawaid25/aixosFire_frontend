@@ -8,6 +8,7 @@ import {
     QrCode, DollarSign, AlertTriangle, TrendingUp, TrendingDown,
     Target, Timer, ChevronRight, User, Handshake
 } from 'lucide-react';
+import { formatKsaDateTime, formatKsaTime } from '../../utils/dateTime';
 
 /* ─── Benchmark Configuration ───────────────────────── */
 const BENCHMARK = {
@@ -57,8 +58,8 @@ const calcBenchmark = (inq) => {
 };
 
 const fmt     = (d) => d ? new Date(d).toLocaleDateString()  : '—';
-const fmtFull = (d) => d ? new Date(d).toLocaleString()       : '—';
-const fmtTime = (d) => d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const fmtFull = (d) => d ? formatKsaDateTime(d)              : '—';
+const fmtTime = (d) => d ? formatKsaTime(d) : '';
 
 /* ─── Shared helpers ─────────────────────────────────── */
 const getBadgeClass = (status) => {

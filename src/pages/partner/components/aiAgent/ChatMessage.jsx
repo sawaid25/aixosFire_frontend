@@ -2,6 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, User } from 'lucide-react';
+import { formatKsaTime } from '../../../../utils/dateTime';
 
 const ChatMessage = ({ role, message, timestamp }) => {
   const isAssistant = role === 'assistant';
@@ -50,7 +51,7 @@ const ChatMessage = ({ role, message, timestamp }) => {
         {timestamp && (
           <div className={`px-1 opacity-70 ${isAssistant ? '' : 'text-right'}`}>
             <span className="text-[10px] text-slate-500">
-              {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {formatKsaTime(timestamp)}
             </span>
           </div>
         )}

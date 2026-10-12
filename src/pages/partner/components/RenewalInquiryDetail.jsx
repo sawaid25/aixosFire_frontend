@@ -9,6 +9,7 @@ import PartnerQuotationModal from './PartnerQuotationModal';
 import { fetchQuotationByInquiryId } from '../../../api/maintenanceApi';
 import { useAuth } from '../../../context/AuthContext';
 import { supabase } from '../../../supabaseClient';
+import { formatKsaDateTime } from '../../../utils/dateTime';
 
 const STATUS_CARD_STYLE = {
     pending: 'bg-amber-50 border-amber-100',
@@ -35,7 +36,7 @@ const STATUS_LABEL = {
 };
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
-const fmtDateTime = (value) => (value ? new Date(value).toLocaleString() : '—');
+const fmtDateTime = (value) => (value ? formatKsaDateTime(value) : '—');
 
 const DetailCell = ({ label, value }) => (
     <div>

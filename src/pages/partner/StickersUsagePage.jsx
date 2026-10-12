@@ -7,6 +7,7 @@ import {
   repairMissingStickerRecords,
   stickerLogRowDisplay,
 } from '../../api/partnerStickers';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 const SERVICE_FILTER_ALL = 'all';
 
@@ -14,7 +15,7 @@ const formatDateUsed = (iso) => {
   if (!iso) return '—';
   try {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+    return Number.isNaN(d.getTime()) ? '—' : formatKsaDateTime(d);
   } catch {
     return '—';
   }

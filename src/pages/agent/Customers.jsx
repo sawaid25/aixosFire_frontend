@@ -4,14 +4,15 @@ import { useAuth } from '../../context/AuthContext';
 import { Search, MapPin, Phone, ArrowRight, User, Plus, RefreshCw, Calendar, History, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageLoader from "../../components/PageLoader";
+import { formatKsaDate, formatKsaTime } from '../../utils/dateTime';
 
 const formatDateTime = (value) => {
     if (!value) return { date: 'N/A', time: null };
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return { date: 'N/A', time: null };
     return {
-        date: d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
-        time: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+        date: formatKsaDate(d, { year: 'numeric', month: 'short', day: 'numeric' }),
+        time: formatKsaTime(d),
     };
 };
 

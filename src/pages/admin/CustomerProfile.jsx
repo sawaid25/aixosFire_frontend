@@ -8,6 +8,7 @@ import {
     Activity, CheckCircle, MessageSquare, QrCode, Clock,
     FileText, XCircle, Eye, ChevronRight, Tag, AlertTriangle
 } from 'lucide-react';
+import { formatKsaDate, formatKsaDateTime, formatKsaTime } from '../../utils/dateTime';
 
 /* ── helpers ──────────────────────────────────────────── */
 const getBadgeClass = (s) => {
@@ -457,8 +458,8 @@ create index if not exists idx_cqr_customer
                                 const fmtDate = (d) => {
                                     if (!d) return '—';
                                     const dt = new Date(d);
-                                    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                                        + ', ' + dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                    return formatKsaDate(dt, { day: '2-digit', month: 'short', year: 'numeric' }, 'en-GB')
+                                        + ', ' + formatKsaTime(dt, { hour: '2-digit', minute: '2-digit' }, 'en-GB');
                                 };
 
                                 const payloadFields = [
@@ -604,7 +605,7 @@ create index if not exists idx_cqr_customer
                                         <span className="text-xs font-bold text-slate-700">
                                             {c.is_admin ? (c.is_bot ? 'AI Bot' : 'Admin') : 'Customer'}
                                         </span>
-                                        <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleString()}</span>
+                                        <span className="text-xs text-slate-400">{formatKsaDateTime(c.created_at)}</span>
                                     </div>
                                     <p className="text-sm text-slate-700 leading-relaxed">{c.message}</p>
                                 </div>

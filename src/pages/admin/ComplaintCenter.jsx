@@ -5,6 +5,7 @@ import ComplaintChat from '../../components/Chat/ComplaintChat';
 import { getComplaintThreads } from '../../api/complaintsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 const ComplaintCenter = () => {
     const { user } = useAuth();
@@ -128,7 +129,7 @@ const ComplaintCenter = () => {
                                     <p className="line-clamp-2 text-xs text-slate-500">{thread.lastMessage}</p>
                                     <div className="mt-2 flex items-center justify-between">
                                         <span className="text-[10px] text-slate-400">
-                                            {new Date(thread.createdAt).toLocaleString()}
+                                            {formatKsaDateTime(thread.createdAt)}
                                         </span>
                                         {thread.unreadCount > 0 && (
                                             <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">

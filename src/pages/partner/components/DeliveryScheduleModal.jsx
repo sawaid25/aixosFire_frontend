@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Clock, X, CheckCircle2, Truck } from 'lucide-react';
+import { ksaInputToIso, KSA_TIME_LABEL } from '../../../utils/dateTime';
 
 const DeliveryScheduleModal = ({ isOpen, onClose, onSchedule, loading }) => {
     const [pickupDate, setPickupDate] = useState('');
@@ -10,11 +11,8 @@ const DeliveryScheduleModal = ({ isOpen, onClose, onSchedule, loading }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        // Convert datetime-local (local time) to UTC ISO string
-        const toUTC = (localStr) => {
-            if (!localStr) return null;
-            return new Date(localStr).toISOString();
-        };
+        // The fields are Saudi time (AST) — convert to a UTC ISO string
+        const toUTC = (localStr) => ksaInputToIso(localStr);
 
         onSchedule({ 
             pickup_date: toUTC(pickupDate), 
@@ -48,7 +46,7 @@ const DeliveryScheduleModal = ({ isOpen, onClose, onSchedule, loading }) => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <Clock size={12} className="text-primary-500" />
-                                Proposed Pickup Date
+                                Proposed Pickup Date ({KSA_TIME_LABEL})
                             </label>
                             <input
                                 type="datetime-local"
@@ -62,7 +60,7 @@ const DeliveryScheduleModal = ({ isOpen, onClose, onSchedule, loading }) => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <Calendar size={12} className="text-primary-500" />
-                                Expected Delivery Date
+                                Expected Delivery Date ({KSA_TIME_LABEL})
                             </label>
                             <input
                                 type="datetime-local"

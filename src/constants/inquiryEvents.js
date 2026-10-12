@@ -1,4 +1,5 @@
 import { inquiryStatusMeta } from './inquiryStatus';
+import { formatKsaDateTime } from '../utils/dateTime';
 
 /**
  * Human-readable timeline entries for inquiry_events rows (see
@@ -36,10 +37,7 @@ const EVENT_LABELS = {
 
 export const formatEventDateTime = (value) => {
     if (!value) return '—';
-    const d = new Date(value);
-    return Number.isNaN(d.getTime())
-        ? '—'
-        : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return formatKsaDateTime(value) || '—';
 };
 
 const statusKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '_');

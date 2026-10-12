@@ -7,6 +7,7 @@ import {
     Users, Star, Eye, EyeOff, AlertTriangle, CheckCircle,
     Lock, Activity, Clock, Mail, User
 } from 'lucide-react';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 /* ─── Date helpers ─────────────────────────────── */
 const startOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
@@ -528,7 +529,7 @@ const TeamActivity = () => {
                                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-4">
                                         <Clock size={11} />
                                         <span>
-                                            {lastAt ? `Last active ${lastAt.toLocaleString()}` : 'No recent activity'}
+                                            {lastAt ? `Last active ${formatKsaDateTime(lastAt)}` : 'No recent activity'}
                                         </span>
                                     </div>
 

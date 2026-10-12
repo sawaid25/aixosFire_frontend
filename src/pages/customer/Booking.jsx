@@ -126,32 +126,70 @@ const FieldLabel = ({ children, optional = false, htmlFor }) => (
     </label>
 );
 
+/** Up to `limit` catalog products matching `query` by name, CAT No or Product# — name matches first. */
+const suggestProducts = (products, query, limit = 8) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    // Punctuation/spacing-insensitive: "io mod" finds "I/O Module", "fire ext" finds "Fire Extinguisher".
+    const compact = (v) => (v || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const qCompact = compact(q);
+    const qWords = q.split(/[^a-z0-9]+/).filter(Boolean);
+    const rank = (p) => {
+        const name = (p.name || '').toLowerCase();
+        const nameWords = name.split(/[^a-z0-9]+/).filter(Boolean);
+        const codes = [p.cat_no, p.model_number].map(compact);
+        if (name.startsWith(q)) return 0;
+        if (qCompact && codes.some((c) => c === qCompact)) return 1;
+        if (nameWords.some((w) => w.startsWith(q))) return 2;
+        if (qCompact && compact(name).includes(qCompact)) return 3;
+        if (qWords.length > 0 && qWords.every((qw) => nameWords.some((w) => w.startsWith(qw)))) return 4;
+        if (qCompact && codes.some((c) => c.includes(qCompact))) return 5;
+        return -1;
+    };
+    return products
+        .map((p) => ({ p, r: rank(p) }))
+        .filter((x) => x.r >= 0)
+        .sort((x, y) => x.r - y.r || (x.p.name || '').localeCompare(y.p.name || ''))
+        .slice(0, limit)
+        .map((x) => x.p);
+};
+
 /**
- * Identify a product by CAT# or Product#, or browse the catalog. `value` is
- * { product, catalogNo }; `onChange` receives the same shape.
+ * Identify a product by typing its name, CAT No or Product# (suggestions appear as you
+ * type), or browse the catalog. `value` is { product, catalogNo }; `onChange` receives
+ * the same shape. Enter with no catalog match still tries the server lookup, which also
+ * knows CAT#s stamped on the customer's own earlier items.
  */
 const ProductIdentifier = ({ products, value, onChange, onViewDetails, optional = false, idPrefix }) => {
     const [code, setCode] = useState('');
+    const [open, setOpen] = useState(false);
+    const [highlight, setHighlight] = useState(0);
     const [searching, setSearching] = useState(false);
     const [matches, setMatches] = useState(null);
     const [error, setError] = useState(null);
 
+    const suggestions = suggestProducts(products, code);
+
+    const choose = (product, catalogNo = product?.cat_no || null) => {
+        onChange({ product, catalogNo });
+        setCode('');
+        setOpen(false);
+        setMatches(null);
+        setError(null);
+    };
+
     const runLookup = async () => {
         const trimmed = code.trim();
-        if (!trimmed) {
-            setError('Enter a CAT# or Product#.');
-            return;
-        }
+        if (!trimmed) return;
         setSearching(true);
         setError(null);
         setMatches(null);
         try {
             const found = await lookupProductByCode(trimmed);
             if (!found || found.length === 0) {
-                setError(`No product found for “${trimmed}”. Check the code, or browse the catalog below.`);
+                setError(`No product found for “${trimmed}”. Try another name or code, or browse the catalog below.`);
             } else if (found.length === 1) {
-                onChange({ product: found[0].product, catalogNo: found[0].catalog_no || null });
-                setCode('');
+                choose(found[0].product, found[0].catalog_no || null);
             } else {
                 setMatches(found);
             }
@@ -197,33 +235,81 @@ const ProductIdentifier = ({ products, value, onChange, onViewDetails, optional 
         );
     }
 
+    const showSuggestions = open && code.trim() !== '';
     return (
         <div className="space-y-3">
             <div>
-                <FieldLabel optional={optional} htmlFor={`${idPrefix}-code`}>CAT# or Product#</FieldLabel>
-                <div className="flex gap-2">
+                <FieldLabel optional={optional} htmlFor={`${idPrefix}-code`}>Product name, CAT# or Product#</FieldLabel>
+                <div className="relative">
                     <input
                         id={`${idPrefix}-code`}
                         type="text"
+                        autoComplete="off"
+                        role="combobox"
+                        aria-expanded={showSuggestions}
+                        aria-controls={`${idPrefix}-suggestions`}
                         value={code}
-                        onChange={(e) => setCode(e.target.value)}
+                        onChange={(e) => {
+                            setCode(e.target.value);
+                            setOpen(true);
+                            setHighlight(0);
+                            setError(null);
+                            setMatches(null);
+                        }}
+                        onFocus={() => setOpen(true)}
+                        onBlur={() => setOpen(false)}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
+                            if (e.key === 'ArrowDown' && suggestions.length > 0) {
                                 e.preventDefault();
-                                runLookup();
+                                setOpen(true);
+                                setHighlight((h) => (h + 1) % suggestions.length);
+                            } else if (e.key === 'ArrowUp' && suggestions.length > 0) {
+                                e.preventDefault();
+                                setHighlight((h) => (h - 1 + suggestions.length) % suggestions.length);
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (showSuggestions && suggestions[highlight]) choose(suggestions[highlight]);
+                                else runLookup();
+                            } else if (e.key === 'Escape') {
+                                setOpen(false);
                             }
                         }}
-                        placeholder="e.g. AIR-0032 or the model number"
-                        className="input-field py-2 text-sm font-mono"
+                        placeholder="Start typing a product name, e.g. Foam or AIR-0032"
+                        className="input-field py-2 text-sm pr-9"
                     />
-                    <button
-                        type="button"
-                        onClick={runLookup}
-                        disabled={searching}
-                        className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold px-4"
-                    >
-                        {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Find
-                    </button>
+                    {searching && <Loader2 size={14} className="animate-spin text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />}
+                    {showSuggestions && (
+                        <ul
+                            id={`${idPrefix}-suggestions`}
+                            role="listbox"
+                            className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg divide-y divide-slate-100"
+                        >
+                            {suggestions.length === 0 ? (
+                                <li className="px-3 py-2 text-xs text-slate-500">
+                                    No product matches “{code.trim()}”. Press Enter to search by code, or browse the catalog below.
+                                </li>
+                            ) : (
+                                suggestions.map((p, i) => (
+                                    <li
+                                        key={p.id}
+                                        role="option"
+                                        aria-selected={i === highlight}
+                                        // mousedown (not click) so the input's blur doesn't close the list first
+                                        onMouseDown={(e) => { e.preventDefault(); choose(p); }}
+                                        onMouseEnter={() => setHighlight(i)}
+                                        className={`px-3 py-2 cursor-pointer ${i === highlight ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+                                    >
+                                        <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                                        <p className="text-xs text-slate-500 flex flex-wrap gap-x-3">
+                                            <span>{p.category || 'Other'}</span>
+                                            {p.cat_no && <span className="font-mono">CAT# {p.cat_no}</span>}
+                                            {p.model_number && <span className="font-mono">Product# {p.model_number}</span>}
+                                        </p>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+                    )}
                 </div>
                 {error && <p className="text-xs text-amber-700 mt-1.5">{error}</p>}
                 {matches && (
@@ -233,11 +319,7 @@ const ProductIdentifier = ({ products, value, onChange, onViewDetails, optional 
                             <button
                                 key={m.product.id}
                                 type="button"
-                                onClick={() => {
-                                    onChange({ product: m.product, catalogNo: m.catalog_no || null });
-                                    setMatches(null);
-                                    setCode('');
-                                }}
+                                onClick={() => choose(m.product, m.catalog_no || null)}
                                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
                             >
                                 <span className="font-semibold text-slate-800">{m.product.name}</span>
@@ -257,7 +339,7 @@ const ProductIdentifier = ({ products, value, onChange, onViewDetails, optional 
                     value=""
                     onChange={(e) => {
                         const p = products.find((x) => String(x.id) === e.target.value);
-                        if (p) onChange({ product: p, catalogNo: null });
+                        if (p) onChange({ product: p, catalogNo: p.cat_no || null });
                     }}
                     className="input-field py-2 text-sm"
                 >

@@ -5,6 +5,7 @@ import { approveMaintenanceSchedule } from '../../../api/maintenanceApi';
 import InquiryChatBox from '../../../components/Chat/InquiryChatBox';
 import { normalizeInquiryStatus } from '../../../constants/inquiryStatus';
 import { assignedPartnerInfo } from '../dashboardUtils';
+import { formatKsaDateTime } from '../../../utils/dateTime';
 
 /**
  * Pieces of a customer inquiry shared by the Dashboard cards and the
@@ -70,15 +71,14 @@ export const VisitScheduleRow = ({ inquiry, onDone }) => {
             <div className="flex items-center gap-2">
                 <Calendar size={14} className="text-primary-500" />
                 <span className="font-bold text-primary-700">
-                    Visit: {new Date(inquiry.scheduled_date).toLocaleString('en-PK', {
-                        timeZone: 'Asia/Karachi',
+                    Visit: {formatKsaDateTime(inquiry.scheduled_date, {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit',
                         hour12: true
-                    })}
+                    }, 'en-US')}
                 </span>
                 {approval && (
                     <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[10px] ${approval === 'approved' ? 'bg-emerald-100 text-emerald-700' :

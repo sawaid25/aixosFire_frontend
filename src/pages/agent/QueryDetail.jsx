@@ -28,6 +28,7 @@ import SwitchPartnerModal from './components/SwitchPartnerModal';
 import InquiryChatBox from '../../components/Chat/InquiryChatBox';
 import { toast } from 'react-hot-toast';
 import { Truck, Clock, CheckCircle, AlertCircle, UserPlus, MessageCircle, X } from 'lucide-react';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 const QueryDetail = () => {
     const { id } = useParams();
@@ -137,13 +138,13 @@ const QueryDetail = () => {
     };
 
     const formatDate = (date) =>
-        date ? new Date(date).toLocaleDateString('en-US', {
+        date ? formatKsaDateTime(date, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
-        }) : 'N/A';
+        }, 'en-US') : 'N/A';
 
     const formatDateOnly = (date) =>
         date ? new Date(date).toLocaleDateString('en-US', {

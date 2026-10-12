@@ -3,6 +3,7 @@ import { Send, MessageCircle, Loader2, X, ArrowDown } from 'lucide-react';
 import { getDirectMessagesHistory, sendDirectMessage, updateDirectMessageStatus, markMessagesAsRead } from '../../api/chatApi';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../supabaseClient';
+import { formatKsaTime } from '../../utils/dateTime';
 
 const InquiryChatBox = ({
     inquiryId,
@@ -233,7 +234,7 @@ const InquiryChatBox = ({
                             }
 
                             const isMe = String(item.sender_id) === String(user?.id);
-                            const time = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const time = formatKsaTime(item.created_at);
 
                             return (
                                 <div key={item.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>

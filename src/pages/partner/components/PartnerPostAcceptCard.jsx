@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ClipboardCheck, Upload, CalendarClock, Clock, XCircle, FileText } from 'lucide-react';
+import { formatKsaDateTime } from '../../../utils/dateTime';
 
 /**
  * Shown after a maintenance inquiry is accepted — matches “Inquiry accepted” next-step UI.
@@ -30,7 +31,7 @@ const PartnerPostAcceptCard = ({ inquiryId, itemId, onUploadReport, onScheduleDa
                         <Clock className="text-amber-500 shrink-0 mt-0.5" size={16} />
                         <div>
                             <p className="text-xs font-bold text-amber-800">Visit Pending Approval</p>
-                            <p className="text-[11px] text-amber-700 mt-1">Scheduled for: {new Date(scheduledDate).toLocaleString()}</p>
+                            <p className="text-[11px] text-amber-700 mt-1">Scheduled for: {formatKsaDateTime(scheduledDate)}</p>
                         </div>
                     </div>
                 )}
@@ -48,7 +49,7 @@ const PartnerPostAcceptCard = ({ inquiryId, itemId, onUploadReport, onScheduleDa
                         <CheckCircle className="text-emerald-500 shrink-0 mt-0.5" size={16} />
                         <div>
                             <p className="text-xs font-bold text-emerald-800">Visit Approved</p>
-                            <p className="text-[11px] text-emerald-700 mt-1">Scheduled for: {new Date(scheduledDate).toLocaleString()}</p>
+                            <p className="text-[11px] text-emerald-700 mt-1">Scheduled for: {formatKsaDateTime(scheduledDate)}</p>
                         </div>
                     </div>
                 )}

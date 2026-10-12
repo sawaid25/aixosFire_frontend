@@ -20,6 +20,7 @@ import DeliveryScheduleModal from './components/DeliveryScheduleModal';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import { formatKsaDateTime } from '../../utils/dateTime';
 
 const pdfVfs = pdfFonts?.pdfMake?.vfs || pdfFonts?.vfs;
 if (pdfVfs && !pdfMake.vfs) {
@@ -327,7 +328,7 @@ const InquiryItemsList = () => {
                             { text: `Inquiry Type: ${inquiryType}`, style: 'metaText' }
                         ],
                         [
-                            { text: `Date: ${formatVal(new Date(inquiry.created_at).toLocaleString())}`, style: 'metaText' },
+                            { text: `Date: ${formatVal(formatKsaDateTime(inquiry.created_at))}`, style: 'metaText' },
                             { text: `Status: ${formatVal(inquiry.status)}`, style: 'metaText' }
                         ]
                     ],
