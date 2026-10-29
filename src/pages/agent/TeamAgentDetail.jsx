@@ -6,6 +6,7 @@ import {
     CheckCircle, XCircle, AlertTriangle
 } from 'lucide-react';
 import { formatKsaDateTime } from '../../utils/dateTime';
+import AgentAvatar from '../../components/AgentAvatar';
 
 /* ─── Helpers ────────────────────────────────── */
 const startOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
@@ -26,7 +27,7 @@ const getPriorityClass = (p) => {
     const v = (p || '').toLowerCase();
     if (v === 'high')   return 'text-red-600 font-bold';
     if (v === 'low')    return 'text-slate-400';
-    return 'text-amber-600 font-semibold';
+    return 'text-amber-700 font-semibold';
 };
 
 const FILTERS = [
@@ -168,10 +169,7 @@ const TeamAgentDetail = () => {
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                 <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                        {agent.profile_photo
-                            ? <img src={agent.profile_photo} alt={agent.name} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={26} /></div>
-                        }
+                        <AgentAvatar src={agent.profile_photo} alt={agent.name} iconSize={26} />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h2 className="text-xl font-bold text-slate-900">{agent.name}</h2>

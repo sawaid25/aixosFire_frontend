@@ -32,6 +32,11 @@
   --color-accent-950: #431407;
 
   /* Colors - Slate Custom */
+  /* Muted text (labels, table headers, helper text) is slate-400 in 600+ places, mostly
+     small text on white. Tailwind's default (#90a1b9) is only 2.6:1 on white; this shade
+     is 3.9:1 on white and still 4.5:1 on the dark sidebars, and stays lighter than
+     slate-500 so the grey hierarchy keeps its steps. */
+  --color-slate-400: oklch(0.6 0.04 256.788);
   --color-slate-850: #1e293b;
   --color-slate-900: #0f172a;
 
@@ -55,13 +60,22 @@
     @apply bg-slate-50 text-slate-900 font-sans;
   }
 
+  /* No colour here: headings inherit it (body is slate-900), so a heading inside a
+     dark panel or banner (text-white) stays readable instead of being forced dark. */
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-display tracking-tight text-slate-900;
+    @apply font-display tracking-tight;
+  }
+
+  /* Keyboard focus: a visible brand ring on links/buttons that don't style their own
+     focus. :focus-visible = keyboard only (no ring on mouse clicks); :where() keeps the
+     specificity at zero so any component's own focus styles still win. */
+  :where(a, button, [role="button"], summary, [tabindex]):focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary-500;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -73,6 +87,27 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-slate-300 rounded-full hover:bg-primary-400 transition-colors;
+  }
+}
+
+/* Shared component classes live in the components layer so that utilities passed
+   alongside them always win — e.g. `input-field pl-11` really gets the extra left padding
+   for an icon, and `btn-primary w-full` / a page's own bg-* overrides apply. */
+@layer components {
+  .btn-primary {
+    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium px-6 py-3 rounded-xl shadow-lg shadow-primary-500/30 transition-all active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-900 hover:bg-slate-800 text-white font-medium px-6 py-3 rounded-xl shadow-lg transition-all active:scale-95;
+  }
+
+  .btn-outline {
+    @apply border-2 border-slate-200 hover:border-primary-500 hover:text-primary-600 text-slate-600 font-medium px-6 py-3 rounded-xl transition-all;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all duration-200 bg-white;
   }
 }
 
@@ -89,21 +124,6 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700;
   }
 
-  .btn-primary {
-    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium px-6 py-3 rounded-xl shadow-lg shadow-primary-500/30 transition-all active:scale-95;
-  }
-
-  .btn-secondary {
-    @apply bg-slate-900 hover:bg-slate-800 text-white font-medium px-6 py-3 rounded-xl shadow-lg transition-all active:scale-95;
-  }
-
-  .btn-outline {
-    @apply border-2 border-slate-200 hover:border-primary-500 hover:text-primary-600 text-slate-600 font-medium px-6 py-3 rounded-xl transition-all;
-  }
-
-  .input-field {
-    @apply w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all duration-200 bg-white;
-  }
 }
 
 /* react-phone-input-2 theme overrides */
@@ -123,3 +143,9 @@
   background-color: rgb(248 250 252) !important;
   border-radius: 0.75rem 0 0 0.75rem;
 }
+
+/* // admin kisi ko bhi koi bhi access desakta 
+interneal teams ke bhi log isme login karsakty hai aur phr admin isko access desakta hai 
+for example kisi team member ko agent ka access dediya kisi ko complaints ka page dediya.
+
+team member login krne ke koshish karega aur phr admin ko notification ayega jab admin approve karega to hi login kr sakega  */

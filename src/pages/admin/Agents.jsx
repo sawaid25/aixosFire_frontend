@@ -5,6 +5,7 @@ import { Check, X, User, Phone, MapPin, FileText, Shield, Pause, Eye, MessageSqu
 import PageLoader from '../../components/PageLoader';
 import { AGENT_STATUS } from '../../constants/agentApprovalStatus';
 import { updateAgentStatus } from '../../api/admin';
+import AgentAvatar from '../../components/AgentAvatar';
 
 const TABS = [
     { value: AGENT_STATUS.PENDING, label: 'Pending' },
@@ -144,13 +145,7 @@ const AgentManagement = () => {
                     {agents.map((agent) => (
                         <div key={agent.id} className="bg-white rounded-3xl p-6 shadow-soft border border-slate-100 flex flex-col md:flex-row gap-6 items-start animate-fade-in group hover:shadow-lg transition-all">
                             <div className="w-24 h-24 rounded-2xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                                {agent.profile_photo ? (
-                                    <img src={getImageUrl(agent.profile_photo)} alt={agent.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                        <User size={32} />
-                                    </div>
-                                )}
+                                <AgentAvatar src={getImageUrl(agent.profile_photo)} alt={agent.name} iconSize={32} />
                             </div>
 
                             <div className="flex-1 space-y-3">
@@ -207,7 +202,7 @@ const AgentManagement = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => setAgentStatus(agent.id, AGENT_STATUS.ACCEPTED, { confirmReject: false })}
-                                                className="btn-primary py-2 px-4 shadow-none bg-green-500 hover:bg-green-600 text-sm flex items-center justify-center gap-2"
+                                                className="btn-primary py-2 px-4 shadow-none bg-green-600 hover:bg-green-700 text-sm flex items-center justify-center gap-2"
                                             >
                                                 <Check size={16} /> Accept
                                             </button>

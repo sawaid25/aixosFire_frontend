@@ -95,7 +95,7 @@ const Partners = () => {
             {/* Summary KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                    { icon: Handshake,    label: 'Total Partners', value: partners.length,  color: 'bg-orange-50 text-orange-600' },
+                    { icon: Handshake,    label: 'Total Partners', value: partners.length,  color: 'bg-orange-50 text-orange-700' },
                     { icon: CheckCircle,  label: 'Active',         value: activeCount,       color: 'bg-green-50 text-green-600' },
                     { icon: Activity,     label: 'Total Inquiries',value: totalInquiries,    color: 'bg-blue-50 text-blue-600' },
                     { icon: Tag,          label: 'Stickers Used',  value: totalStickers,     color: 'bg-violet-50 text-violet-600' },
@@ -150,7 +150,7 @@ const Partners = () => {
                             <div className="flex flex-col sm:flex-row gap-5 items-start">
                                 {/* Avatar */}
                                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-100 to-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
-                                    <Handshake size={24} className="text-orange-500"/>
+                                    <Handshake size={24} className="text-orange-700"/>
                                 </div>
 
                                 {/* Info */}
@@ -173,7 +173,7 @@ const Partners = () => {
                                             { label: 'Total', value: partner.total, color: 'text-slate-900' },
                                             { label: 'Accepted', value: partner.accepted, color: 'text-emerald-600' },
                                             { label: 'Rejected', value: partner.rejected, color: 'text-red-600' },
-                                            { label: 'Pending', value: partner.pending, color: 'text-amber-600' },
+                                            { label: 'Pending', value: partner.pending, color: 'text-amber-700' },
                                             { label: 'Stickers Used', value: partner.stickersUsed, color: 'text-violet-600' },
                                         ].map(({ label, value, color }) => (
                                             <div key={label} className="bg-slate-50 rounded-xl p-2.5">

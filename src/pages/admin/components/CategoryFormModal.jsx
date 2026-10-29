@@ -111,7 +111,7 @@ const CategoryFormModal = ({ isOpen, onClose, category, onSaved }) => {
             <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
                 <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50 sticky top-0 z-10">
                     <div className="flex items-center gap-3">
-                        <div className="p-3 bg-orange-100 text-orange-600 rounded-2xl">
+                        <div className="p-3 bg-orange-100 text-orange-700 rounded-2xl">
                             <Boxes size={24} />
                         </div>
                         <div>

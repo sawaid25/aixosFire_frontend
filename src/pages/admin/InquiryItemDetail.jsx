@@ -178,7 +178,7 @@ const InquiryItemDetail = () => {
                     supabase.from('inquiry_items').select('*').eq('id', itemId).maybeSingle(),
                     supabase
                         .from('inquiries')
-                        .select('*, customers(id, business_name), agents(id, name), partners(id, name)')
+                        .select('*, customers(id, business_name), agents(id, name), partners(id, business_name)')
                         .eq('id', inquiryId)
                         .maybeSingle(),
                 ]);
@@ -401,7 +401,7 @@ const InquiryItemDetail = () => {
                                 <InfoRow icon={User}     label="Agent"         value={inquiry.agents.name} />
                             )}
                             {inquiry.partners && (
-                                <InfoRow icon={Handshake} label="Partner"      value={inquiry.partners.name} />
+                                <InfoRow icon={Handshake} label="Partner"      value={inquiry.partners.business_name} />
                             )}
                         </div>
                     ) : (
@@ -444,9 +444,9 @@ const InquiryItemDetail = () => {
 
                         {/* Benchmark */}
                         <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
-                            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">Benchmark Date</p>
+                            <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">Benchmark Date</p>
                             <p className="text-sm font-bold text-amber-800">{fmt(bmResult.benchmarkEnd)}</p>
-                            <p className="text-xs text-amber-500 mt-1">{bmConfig.label} limit</p>
+                            <p className="text-xs text-amber-700 mt-1">{bmConfig.label} limit</p>
                         </div>
 
                         {/* Closing */}
@@ -470,7 +470,7 @@ const InquiryItemDetail = () => {
                                 {bmResult.closingDate ? fmt(bmResult.closingDate) : 'Not closed yet'}
                             </p>
                             {bmResult.durationDays && (
-                                <p className={`text-xs mt-1 ${bmResult.withinBenchmark ? 'text-emerald-500' : 'text-red-400'}`}>
+                                <p className={`text-xs mt-1 ${bmResult.withinBenchmark ? 'text-emerald-600' : 'text-red-400'}`}>
                                     {bmResult.durationDays}d to complete
                                 </p>
                             )}
@@ -513,7 +513,7 @@ const InquiryItemDetail = () => {
                 {/* At-risk warning */}
                 {bmResult?.benchmarkStatus === 'at_risk' && (
                     <div className="flex items-center gap-2 mb-5 px-4 py-3 rounded-xl bg-amber-50 border border-amber-100">
-                        <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
+                        <AlertTriangle size={14} className="text-amber-700 flex-shrink-0" />
                         <p className="text-xs text-amber-700 font-medium">
                             Benchmark deadline has passed — this inquiry is overdue.
                         </p>

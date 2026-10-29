@@ -81,6 +81,14 @@ client.interceptors.response.use(
         if (error.response?.data?.code === 'IMPERSONATION_EXPIRED') {
             window.dispatchEvent(new CustomEvent('impersonation-expired'));
         }
+        // Internal team: Admin deactivated the account, or changed its pages. AuthContext
+        // signs the member out / refreshes their permissions so the UI matches the backend.
+        const teamCode = error.response?.data?.code;
+        if (teamCode === 'TEAM_ACCOUNT_INACTIVE' || teamCode === 'TEAM_ACCOUNT_INVALID') {
+            window.dispatchEvent(new CustomEvent('team-access-revoked'));
+        } else if (teamCode === 'TEAM_PERMISSION_DENIED') {
+            window.dispatchEvent(new CustomEvent('team-permissions-changed'));
+        }
         return Promise.reject(error);
     }
 );

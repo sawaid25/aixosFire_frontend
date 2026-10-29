@@ -106,7 +106,7 @@ const GeneralInquiries = () => {
                 <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Admin Panel</p>
                     <h1 className="text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
-                        <Inbox size={24} className="text-amber-600" /> General Inquiries
+                        <Inbox size={24} className="text-amber-700" /> General Inquiries
                     </h1>
                     <p className="text-slate-500 text-sm mt-0.5">
                         {rows.length} inquir{rows.length === 1 ? 'y' : 'ies'} awaiting Partner assignment.

@@ -58,7 +58,7 @@ const ValidationProgress = ({ status }) => {
                 {VALIDATION_STEPS.map((step, i) => (
                     <React.Fragment key={step.key}>
                         <div className="flex flex-col items-center gap-1.5 shrink-0">
-                            <span className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${i <= current ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-300'}`}>
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${i <= current ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-300'}`}>
                                 <CheckCircle size={14} />
                             </span>
                             <span className={`text-xs font-semibold ${i === current ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>

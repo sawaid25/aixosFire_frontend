@@ -112,7 +112,7 @@ const InquiryList = () => {
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Admin Panel</p>
-                    <h1 className="text-2xl font-display font-bold text-slate-900">Inquiry Details</h1>
+                    <h1 className="text-2xl font-display font-bold text-slate-900">All Inquiries</h1>
                     <p className="text-slate-500 text-sm mt-0.5">
                         {total} total inquiries
                     </p>
@@ -142,7 +142,7 @@ const InquiryList = () => {
                     <select
                         value={statusFilter}
                         onChange={e => setStatus(e.target.value)}
-                        className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                        className="w-full sm:w-auto text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
                     >
                         {STATUS_TYPES.map(s => (
                             <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
@@ -151,11 +151,11 @@ const InquiryList = () => {
                 </div>
 
                 {/* Type filter */}
-                <div>
+                <div className="pl-6 sm:pl-0">
                     <select
                         value={typeFilter}
                         onChange={e => setType(e.target.value)}
-                        className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                        className="w-full sm:w-auto text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
                     >
                         {SERVICE_TYPES.map(t => (
                             <option key={t} value={t}>{t === 'All' ? 'All Types' : t.charAt(0).toUpperCase() + t.slice(1)}</option>
@@ -169,7 +169,7 @@ const InquiryList = () => {
                     onClick={() => setGeneralOnly((v) => !v)}
                     className={`flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border transition-colors ${
                         generalOnly
-                            ? 'bg-amber-500 border-amber-500 text-white'
+                            ? 'bg-amber-600 border-amber-500 text-white'
                             : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                     }`}
                 >
@@ -226,7 +226,7 @@ const InquiryList = () => {
                                             <td className="px-6 py-4">
                                                 <Link
                                                     to={`/admin/inquiries/${inq.id}`}
-                                                    className="font-bold text-slate-900 hover:text-primary-600 text-sm"
+                                                    className="font-bold text-slate-900 hover:text-primary-600 text-sm whitespace-nowrap"
                                                 >
                                                     {inq.inquiry_no || `#${inq.id?.toString().slice(-6)}`}
                                                 </Link>
@@ -277,7 +277,7 @@ const InquiryList = () => {
                                                 {inq.priority ? (
                                                     <span className={`text-xs font-semibold ${
                                                         inq.priority === 'High'   ? 'text-red-600' :
-                                                        inq.priority === 'Medium' ? 'text-amber-600' :
+                                                        inq.priority === 'Medium' ? 'text-amber-700' :
                                                         'text-slate-400'
                                                     }`}>{inq.priority}</span>
                                                 ) : (

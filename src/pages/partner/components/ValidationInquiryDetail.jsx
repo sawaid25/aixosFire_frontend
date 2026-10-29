@@ -243,7 +243,7 @@ const ValidationInquiryDetail = ({
                                                 type="button"
                                                 onClick={onAccept}
                                                 disabled={actionLoading || !onAccept}
-                                                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
                                             >
                                                 {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                                                 Accept Inquiry
@@ -264,7 +264,7 @@ const ValidationInquiryDetail = ({
                                             type="button"
                                             onClick={onComplete}
                                             disabled={actionLoading || !onComplete}
-                                            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
                                         >
                                             {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                                             Mark Complete
@@ -286,7 +286,7 @@ const ValidationInquiryDetail = ({
                                             type="button"
                                             onClick={onComplete}
                                             disabled={actionLoading || !onComplete}
-                                            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
                                         >
                                             {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                                             Mark Complete

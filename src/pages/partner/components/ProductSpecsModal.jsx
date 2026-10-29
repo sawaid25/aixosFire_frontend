@@ -55,7 +55,7 @@ const ProductSpecsModal = ({ isOpen, onClose, product }) => {
                             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Capacity</p>
                                 <div className="flex items-center gap-2 text-sm">
-                                    <Info size={14} className="text-amber-500" />
+                                    <Info size={14} className="text-amber-700" />
                                     <p className="font-bold text-slate-900">{product.capacity}</p>
                                 </div>
                             </div>
@@ -72,7 +72,7 @@ const ProductSpecsModal = ({ isOpen, onClose, product }) => {
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Safety Certification</p>
                             <div className="flex items-center gap-2">
-                                <Shield size={16} className="text-emerald-500" />
+                                <Shield size={16} className="text-emerald-600" />
                                 <p className="font-bold text-slate-900">{product.specs?.safetyCertification || '--'}</p>
                             </div>
                         </div>

@@ -1,14 +1,49 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AlertCircle, ArrowLeft, Upload, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from '../api/client';
+import { AlertCircle, ArrowLeft, Upload, Eye, EyeOff, Loader2, Lock } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
+
+// Headline per invitation problem; the backend's message is shown under it.
+const INVITE_TITLES = {
+    INVITE_MISSING: 'Invitation required',
+    INVITE_INVALID: 'Invalid invitation link',
+    INVITE_EXPIRED: 'Invitation expired',
+    INVITE_USED: 'Invitation already used',
+    INVITE_REVOKED: 'Invitation cancelled',
+};
 
 const RegisterPage = () => {
     const { role } = useParams();
     const navigate = useNavigate();
     const { register } = useAuth();
+    // Internal Team registration is invitation-only: the emailed link carries ?token=.
+    const [searchParams] = useSearchParams();
+    const inviteToken = role === 'internal_team' ? (searchParams.get('token') || '') : '';
+    const [invite, setInvite] = useState({ state: 'loading' });
+
+    useEffect(() => {
+        if (!inviteToken) return undefined;
+        let active = true;
+        (async () => {
+            try {
+                const res = await fetch(`${API_URL}/auth/team-invitations/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: inviteToken }),
+                });
+                const body = await res.json().catch(() => ({}));
+                if (!active) return;
+                if (res.ok) setInvite({ state: 'valid', email: body.email });
+                else setInvite({ state: 'error', code: body.code || 'INVITE_INVALID', error: body.error || 'This invitation link is not valid.' });
+            } catch {
+                if (active) setInvite({ state: 'error', code: 'INVITE_INVALID', error: 'Could not check your invitation. Please try again.' });
+            }
+        })();
+        return () => { active = false; };
+    }, [inviteToken]);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -19,6 +54,8 @@ const RegisterPage = () => {
         owner_name: '',
         address: '',
         business_type: 'Retail',
+        department: '',
+        request_note: '',
         terms_accepted: false
     });
 
@@ -61,7 +98,17 @@ const RegisterPage = () => {
             const isAgent = role === 'agent';
             let dataToSend;
 
-            if (isAgent) {
+            if (isTeam) {
+                // The backend takes the email from the invitation itself; phone is optional.
+                dataToSend = {
+                    token: inviteToken,
+                    name: formData.name,
+                    password: formData.password,
+                    phone: phone ? fullPhone : '',
+                    department: formData.department,
+                    request_note: formData.request_note,
+                };
+            } else if (isAgent) {
                 const formDataObj = new FormData();
                 Object.keys(baseData).forEach(key => {
                     formDataObj.append(key, baseData[key]);
@@ -76,7 +123,11 @@ const RegisterPage = () => {
             }
 
             const result = await register(role, dataToSend);
-            if (result.success) {
+            if (result.success && isTeam) {
+                navigate(`/login/${role}`, {
+                    state: { notice: 'Registration complete. You can sign in once an Admin approves your account.' },
+                });
+            } else if (result.success) {
                 navigate(`/login/${role}`);
             } else {
                 setError(result.error);
@@ -90,6 +141,12 @@ const RegisterPage = () => {
     };
 
     const isAgent = role === 'agent';
+    const isTeam = role === 'internal_team';
+    // No token, or one the backend rejected -> show why instead of the form.
+    const inviteProblem = isTeam && (!inviteToken
+        ? { code: 'INVITE_MISSING', error: 'Internal Team accounts are created by invitation only. Ask an Admin to send you an invitation.' }
+        : invite.state === 'error' ? invite : null);
+    const inviteLoading = isTeam && !inviteProblem && invite.state === 'loading';
 
     return (
         <div className="min-h-screen flex bg-white">
@@ -103,9 +160,11 @@ const RegisterPage = () => {
                         </Link>
                     </div>
                     <div>
-                        <h1 className="text-5xl font-display font-bold mb-6">Join AiXOS Red</h1>
+                        <h1 className="text-5xl font-display font-bold mb-6">{isTeam ? 'Internal Team' : 'Join AiXOS Red'}</h1>
                         <p className="text-xl text-white/80 max-w-md">
-                            {isAgent ? 'Start your journey as a certified safety partner. Upload your credentials to get approved.' : 'Secure your business with professional fire protection.'}
+                            {isTeam
+                                ? 'You have been invited to the Internal Team. Complete your profile and set a password — an Admin then reviews your account and assigns your pages.'
+                                : isAgent ? 'Start your journey as a certified safety partner. Upload your credentials to get approved.' : 'Secure your business with professional fire protection.'}
                         </p>
                     </div>
                     <div className="text-sm text-white/40">&copy; 2026 AiXOS Red.</div>
@@ -115,9 +174,23 @@ const RegisterPage = () => {
             {/* Right Side - Form */}
             <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-20 xl:px-24 bg-slate-50 py-12 overflow-y-auto">
                 <div className="mx-auto w-full max-w-md">
+                    {inviteProblem ? (
+                        <div className="bg-white p-8 rounded-3xl shadow-soft border border-slate-100 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-5">
+                                <Lock size={24} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900 mb-2">{INVITE_TITLES[inviteProblem.code] || INVITE_TITLES.INVITE_INVALID}</h2>
+                            <p className="text-slate-500 mb-6">{inviteProblem.error}</p>
+                            <Link to={`/login/${role}`} className="btn-secondary inline-block">Go to Team Login</Link>
+                        </div>
+                    ) : inviteLoading ? (
+                        <div className="bg-white p-8 rounded-3xl shadow-soft border border-slate-100 flex items-center justify-center gap-3 text-slate-500">
+                            <Loader2 size={18} className="animate-spin" /> Checking your invitation...
+                        </div>
+                    ) : (
                     <div className="bg-white p-8 rounded-3xl shadow-soft border border-slate-100">
-                        <h2 className="text-2xl font-bold text-slate-900 mb-2">Create Account</h2>
-                        <p className="text-slate-500 mb-8">Enter your details and upload required docs.</p>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-2">{isTeam ? 'Complete Registration' : 'Create Account'}</h2>
+                        <p className="text-slate-500 mb-8">{isTeam ? 'You can sign in after an Admin approves your account.' : 'Enter your details and upload required docs.'}</p>
 
                         <form className="space-y-5" onSubmit={handleSubmit}>
                             {error && (
@@ -126,7 +199,45 @@ const RegisterPage = () => {
                                 </div>
                             )}
 
-                            {isAgent ? (
+                            {isTeam ? (
+                                <>
+                                    <Input label="Full Name" name="name" value={formData.name} onChange={handleChange} required />
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Work Email</label>
+                                        <input type="email" value={invite.email || ''} readOnly aria-readonly="true" className="input-field bg-slate-50 text-slate-500 cursor-not-allowed" />
+                                        <p className="text-xs text-slate-500 mt-1">This is the email your invitation was sent to.</p>
+                                    </div>
+                                    <PasswordInput label="Set Password" name="password" value={formData.password} onChange={handleChange} showPassword={showPassword} onToggle={() => setShowPassword(p => !p)} required minLength={8} />
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number <span className="text-slate-400 font-normal">(optional)</span></label>
+                                        <PhoneInput
+                                            country={'sa'}
+                                            enableSearch
+                                            value={phone}
+                                            onChange={setPhone}
+                                            inputClass="!w-full !h-[46px] !rounded-xl !border-slate-200 !pl-14 !text-sm !font-medium focus:!border-primary-500 focus:!ring-2 focus:!ring-primary-500/20"
+                                            buttonClass="!rounded-l-xl !border-slate-200 !bg-slate-50 !h-[46px]"
+                                            containerClass="!w-full"
+                                            searchClass="!rounded-lg !border-slate-200"
+                                            dropdownClass="!rounded-xl !border-slate-200 !shadow-lg"
+                                        />
+                                    </div>
+
+                                    <Input label="Department / Team" name="department" value={formData.department} onChange={handleChange} placeholder="e.g. Operations, Support" />
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">What do you need access to?</label>
+                                        <textarea
+                                            name="request_note"
+                                            rows={3}
+                                            value={formData.request_note}
+                                            onChange={handleChange}
+                                            className="input-field resize-none"
+                                            placeholder="e.g. Complaints, to follow up with customers"
+                                        />
+                                    </div>
+                                </>
+                            ) : isAgent ? (
                                 <>
                                     <div className="flex gap-4">
                                         <div className="flex-1">
@@ -276,7 +387,7 @@ const RegisterPage = () => {
                             )}
 
                             <button type="submit" disabled={loading} className="w-full btn-primary mt-6">
-                                {loading ? 'Processing...' : (isAgent ? 'Submit Application' : 'Create Account')}
+                                {loading ? 'Processing...' : (isTeam ? 'Complete Registration' : isAgent ? 'Submit Application' : 'Create Account')}
                             </button>
                         </form>
 
@@ -289,6 +400,7 @@ const RegisterPage = () => {
                             </p>
                         </div>
                     </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -302,7 +414,7 @@ const Input = ({ label, name, type = "text", value, onChange, placeholder, requi
     </div>
 );
 
-const PasswordInput = ({ label, name, value, onChange, showPassword, onToggle, required = false }) => (
+const PasswordInput = ({ label, name, value, onChange, showPassword, onToggle, required = false, minLength }) => (
     <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
         <div className="relative">
@@ -310,6 +422,7 @@ const PasswordInput = ({ label, name, value, onChange, showPassword, onToggle, r
                 name={name}
                 type={showPassword ? 'text' : 'password'}
                 required={required}
+                minLength={minLength}
                 value={value}
                 onChange={onChange}
                 className="input-field pr-11"

@@ -439,16 +439,8 @@ const InquiryItemsList = () => {
                     >
                         <ArrowLeft size={16} /> Back to Inquiries
                     </Link>
-                    <h1 className="text-4xl md:text-5xl font-display font-black text-slate-900 tracking-tighter uppercase italic">
-                        {isRenewalOnly ? (
-                            <>Renewal <span className="text-primary-500">Inquiry.</span></>
-                        ) : isValidation ? (
-                            <>Validation <span className="text-primary-500">Inquiry.</span></>
-                        ) : isRefill ? (
-                            <>Refill <span className="text-primary-500">Inquiry.</span></>
-                        ) : (
-                            <>Inquiry <span className="text-primary-500">Items.</span></>
-                        )}
+                    <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-900">
+                        {isRenewalOnly ? 'Renewal Inquiry' : isValidation ? 'Validation Inquiry' : isRefill ? 'Refill Inquiry' : 'Inquiry Items'}
                     </h1>
                     <div className="flex flex-wrap items-center gap-4 mt-6">
                         <div className="flex items-center gap-2 px-5 py-2.5 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-600 font-medium text-sm">
@@ -481,7 +473,7 @@ const InquiryItemsList = () => {
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                                 : inquiry.delivery_status === 'partner_confirmed'
                                 ? 'bg-blue-50 text-blue-600 border-blue-100'
-                                : 'bg-amber-50 text-amber-600 border-amber-100'
+                                : 'bg-amber-50 text-amber-700 border-amber-100'
                         }`}>
                             <div className={`w-2 h-2 rounded-full animate-pulse ${
                                 inquiry.delivery_status === 'agent_confirmed' || inquiry.delivery_status === 'confirmed' ? 'bg-emerald-500' : 
@@ -514,7 +506,7 @@ const InquiryItemsList = () => {
                                         type="button"
                                         onClick={() => handleStatusUpdate('accepted', { delivery_mode: 'agent' })}
                                         disabled={actionLoading || inquiry.status === 'accepted'}
-                                        className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto"
+                                        className="px-6 py-3 bg-emerald-600 text-white hover:bg-emerald-700 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto"
                                     >
                                         {actionLoading ? <Loader2 className="animate-spin" size={16} /> : <Truck size={16} />}
                                         Agent Delivery

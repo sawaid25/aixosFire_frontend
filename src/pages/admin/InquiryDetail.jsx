@@ -676,7 +676,7 @@ const InquiryDetail = () => {
                             <InfoRow icon={Phone}    label="Phone"        value={inquiry.agents.phone} />
                             <InfoRow icon={MapPin}   label="Territory"    value={inquiry.agents.territory} />
                             <InfoRow icon={CheckCircle} label="Status"   value={inquiry.agents.status}
-                                valueClass={['accepted','active'].includes((inquiry.agents.status||'').toLowerCase()) ? 'text-emerald-600' : 'text-amber-600'}
+                                valueClass={['accepted','active'].includes((inquiry.agents.status||'').toLowerCase()) ? 'text-emerald-600' : 'text-amber-700'}
                             />
                             {customerRequest && !agentInactive && (
                                 <p className="pt-3 text-xs text-slate-500">Customer request — assigned to this agent.</p>
@@ -684,7 +684,7 @@ const InquiryDetail = () => {
                             {agentInactive && (
                                 <div className="pt-3">
                                     <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
-                                        <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                                        <AlertTriangle size={16} className="text-amber-700 shrink-0" />
                                         <p className="text-xs font-bold text-amber-800">
                                             This agent is no longer active. Reassign the inquiry to an active agent.
                                         </p>
@@ -696,7 +696,7 @@ const InquiryDetail = () => {
                     ) : (customerRequest || agentInactive) ? (
                         <div className="py-2">
                             <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
-                                <Inbox size={16} className="text-amber-600 shrink-0" />
+                                <Inbox size={16} className="text-amber-700 shrink-0" />
                                 <p className="text-xs font-bold text-amber-800">
                                     {agentInactive
                                         ? 'The assigned agent no longer exists. Assign an active agent.'
@@ -714,13 +714,13 @@ const InquiryDetail = () => {
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="p-2 rounded-xl bg-orange-50">
-                            <Handshake size={16} className="text-orange-600" />
+                            <Handshake size={16} className="text-orange-700" />
                         </div>
                         <h3 className="font-bold text-slate-900">Partner</h3>
                         {inquiry.partners?.id && (
                             <Link
                                 to={`/admin/partners/${inquiry.partners.id}`}
-                                className="ml-auto text-xs font-bold text-orange-600 hover:underline flex items-center gap-1"
+                                className="ml-auto text-xs font-bold text-orange-700 hover:underline flex items-center gap-1"
                             >
                                 Profile <ChevronRight size={12} />
                             </Link>
@@ -735,7 +735,7 @@ const InquiryDetail = () => {
                     ) : inquiry.is_general_inquiry ? (
                         <div className="py-2">
                             <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 mb-4">
-                                <Inbox size={16} className="text-amber-600 shrink-0" />
+                                <Inbox size={16} className="text-amber-700 shrink-0" />
                                 <p className="text-xs font-bold text-amber-800">
                                     General Inquiry{subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode) ? ` (${inquiry.type} - ${subtypeOnlyLabel(inquiry.type, items[0]?.validation_mode)})` : ''} — no Partner assigned yet. Needs assignment.
                                 </p>
@@ -845,7 +845,7 @@ const InquiryDetail = () => {
                         <div className="divide-y divide-slate-50">
                             <InfoRow icon={Tag}        label="Service Type"        value={inquiry.type} valueClass="capitalize" />
                             <InfoRow icon={DollarSign} label="Estimated Price"     value={`SAR ${estimatedRevenue}`} valueClass="font-bold text-emerald-700" />
-                            <InfoRow icon={CheckCircle} label="Revenue Realized"   value={isCompleted ? `SAR ${estimatedRevenue}` : 'Pending completion'} valueClass={isCompleted ? 'text-emerald-600 font-bold' : 'text-amber-600'} />
+                            <InfoRow icon={CheckCircle} label="Revenue Realized"   value={isCompleted ? `SAR ${estimatedRevenue}` : 'Pending completion'} valueClass={isCompleted ? 'text-emerald-600 font-bold' : 'text-amber-700'} />
                         </div>
                     </div>
 
@@ -951,7 +951,7 @@ const InquiryDetail = () => {
                         <React.Fragment key={step.label}>
                             <div className="flex flex-col items-center gap-1.5 flex-1">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                                    step.done ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'
+                                    step.done ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'
                                 }`}>
                                     {step.done ? <CheckCircle size={16} /> : i + 1}
                                 </div>

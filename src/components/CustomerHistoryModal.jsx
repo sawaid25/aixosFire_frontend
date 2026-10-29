@@ -60,8 +60,8 @@ const CustomerHistoryModal = ({ isOpen, onClose, customerId, customerName }) => 
     switch (type) {
       case 'Validation': return <CheckCircle2 className="text-blue-500" size={18} />;
       case 'Maintenance': return <Clock className="text-purple-500" size={18} />;
-      case 'Refill': return <RefreshCcw className="text-orange-500" size={18} />;
-      case 'New Unit': return <PlusCircle className="text-emerald-500" size={18} />;
+      case 'Refill': return <RefreshCcw className="text-orange-700" size={18} />;
+      case 'New Unit': return <PlusCircle className="text-emerald-600" size={18} />;
       default: return <FileText className="text-slate-500" size={18} />;
     }
   };

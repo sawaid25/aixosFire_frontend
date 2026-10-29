@@ -19,7 +19,7 @@ const PartnerProductCard = ({ product }) => {
                 </div>
                 <span
                     className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${
-                        product.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                        product.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
                     }`}
                 >
                     {product.is_active ? 'Active' : 'Inactive'}

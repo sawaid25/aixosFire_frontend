@@ -10,6 +10,7 @@ import {
 } from '../../api/complaintsApi';
 import { aiService } from '../../services/ai.service';
 import { formatKsaTime } from '../../utils/dateTime';
+import { teamSenderLabel } from '../../utils/complaintSender';
 
 const ComplaintChat = ({ userId, userRole, isAdminView = false }) => {
     const threadUserId = userId == null ? '' : String(userId).trim();
@@ -188,6 +189,9 @@ const ComplaintChat = ({ userId, userRole, isAdminView = false }) => {
         const fromBot = item.is_bot === true;
 
         if (fromAdmin && fromBot) return 'AI Support Bot';
+        // Internal Team replies are support-side (is_admin) but shown under the member's own name.
+        const teamLabel = fromAdmin ? teamSenderLabel(item) : null;
+        if (teamLabel) return teamLabel;
         if (isAdminView) return fromAdmin ? 'You (Admin)' : `${(userRole || 'User')}`;
         return fromAdmin ? 'Admin' : 'You';
     };

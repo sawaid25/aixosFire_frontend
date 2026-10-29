@@ -28,7 +28,7 @@ const PartnerPostAcceptCard = ({ inquiryId, itemId, onUploadReport, onScheduleDa
                 )}
                 {isPending && (
                     <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-2 text-left">
-                        <Clock className="text-amber-500 shrink-0 mt-0.5" size={16} />
+                        <Clock className="text-amber-700 shrink-0 mt-0.5" size={16} />
                         <div>
                             <p className="text-xs font-bold text-amber-800">Visit Pending Approval</p>
                             <p className="text-[11px] text-amber-700 mt-1">Scheduled for: {formatKsaDateTime(scheduledDate)}</p>
@@ -46,7 +46,7 @@ const PartnerPostAcceptCard = ({ inquiryId, itemId, onUploadReport, onScheduleDa
                 )}
                 {isApproved && (
                     <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-2 text-left">
-                        <CheckCircle className="text-emerald-500 shrink-0 mt-0.5" size={16} />
+                        <CheckCircle className="text-emerald-600 shrink-0 mt-0.5" size={16} />
                         <div>
                             <p className="text-xs font-bold text-emerald-800">Visit Approved</p>
                             <p className="text-[11px] text-emerald-700 mt-1">Scheduled for: {formatKsaDateTime(scheduledDate)}</p>

@@ -113,6 +113,56 @@ export const assignInquiryPartner = async (inquiryId, partnerId) => {
     }
 };
 
+/** Internal Team access requests / members. @param {'pending'|'approved'|'rejected'|'deactivated'} [status] */
+export const getTeamMembers = async (status) => {
+    const response = await client.get('/admin/team-members', { params: status ? { status } : {} });
+    return extractApiData(response, []);
+};
+
+/** @param {{designation: string, permissions: Record<string, string[]>}} access */
+export const approveTeamMember = async (id, access) => {
+    const response = await client.put(`/admin/team-members/${id}/approve`, access);
+    return extractApiData(response, null);
+};
+
+export const rejectTeamMember = async (id, reason) => {
+    const response = await client.put(`/admin/team-members/${id}/reject`, { reason });
+    return extractApiData(response, null);
+};
+
+/** @param {{designation: string, permissions: Record<string, string[]>}} access */
+export const updateTeamMemberAccess = async (id, access) => {
+    const response = await client.put(`/admin/team-members/${id}/permissions`, access);
+    return extractApiData(response, null);
+};
+
+/** @param {'approved'|'deactivated'} status */
+export const setTeamMemberStatus = async (id, status) => {
+    const response = await client.patch(`/admin/team-members/${id}/status`, { status });
+    return extractApiData(response, null);
+};
+
+/** Internal Team invitations (status: pending | expired | used | revoked). */
+export const getTeamInvitations = async () => {
+    const response = await client.get('/admin/team-invitations');
+    return extractApiData(response, []);
+};
+
+export const inviteTeamMember = async (email) => {
+    const response = await client.post('/admin/team-invitations', { email });
+    return extractApiData(response, null);
+};
+
+export const resendTeamInvitation = async (id) => {
+    const response = await client.post(`/admin/team-invitations/${id}/resend`);
+    return extractApiData(response, null);
+};
+
+export const revokeTeamInvitation = async (id) => {
+    const response = await client.post(`/admin/team-invitations/${id}/revoke`);
+    return extractApiData(response, null);
+};
+
 
 // followup, license renewal, refill in sab ki inquiry ma bhi general inquiry banane ka option ayga 
 // partner dashboard pr top pr partner ka naam ayega 

@@ -6,7 +6,7 @@ const RoleCard = ({ to, icon: Icon, title, description, color, badges }) => (
     <Link to={to} className="group relative bg-white p-8 rounded-3xl shadow-soft hover:shadow-2xl transition-all duration-300 border border-slate-100/50 hover:-translate-y-1 overflow-hidden">
         <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${color} opacity-5 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-150`}></div>
 
-        <div className={`w-16 h-16 rounded-2xl ${color} bg-opacity-10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+        <div className={`w-16 h-16 rounded-2xl ${color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
             <Icon size={32} className={color.replace('bg-', 'text-')} />
         </div>
 
@@ -56,6 +56,7 @@ const LandingPage = () => {
                         <a href="#features" className="text-slate-600 hover:text-slate-900 font-medium transition-colors">Features</a>
                         <a href="#about" className="text-slate-600 hover:text-slate-900 font-medium transition-colors">About</a>
                         <Link to="/login/agent" className="text-slate-900 font-medium hover:text-primary-600">Agent Login</Link>
+                        <Link to="/login/internal_team" className="text-slate-900 font-medium hover:text-primary-600">Team Login</Link>
                         <Link to="/login/customer" className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-slate-800 transition-shadow shadow-lg shadow-slate-900/20">
                             Book Service
                         </Link>
@@ -194,6 +195,7 @@ const LandingPage = () => {
                             <li><a href="#" className="hover:text-white transition-colors">For Business</a></li>
                             <li><a href="#" className="hover:text-white transition-colors">For Agents</a></li>
                             <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
+                            <li><Link to="/login/internal_team" className="hover:text-white transition-colors">Internal Team</Link></li>
                         </ul>
                     </div>
                     <div>

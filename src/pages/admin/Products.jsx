@@ -5,13 +5,18 @@ import { supabase } from '../../supabaseClient';
 import PageLoader from '../../components/PageLoader';
 import ProductImageFallback from '../../components/products/ProductImageFallback';
 import CategoryFormModal from './components/CategoryFormModal';
+import useCatalogPortal from '../../hooks/useCatalogPortal';
 import {
     Search, Plus, Pencil, Power, PackageOpen, ChevronRight, Boxes, Upload,
 } from 'lucide-react';
 
-/** Admin catalog root: Category cards. Opening one drills into CategoryProducts.jsx. */
+/**
+ * Catalog root: Category cards. Opening one drills into CategoryProducts.jsx.
+ * Shared by Admin (manage) and Internal Team (read-only) — see useCatalogPortal.
+ */
 const Products = () => {
     const navigate = useNavigate();
+    const { basePath, portalLabel, canManage, catalog } = useCatalogPortal();
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState([]);
     const [productCounts, setProductCounts] = useState({});
@@ -25,20 +30,9 @@ const Products = () => {
     const load = async () => {
         setLoading(true);
         try {
-            const [{ data: cData, error: cErr }, { data: pData, error: pErr }] = await Promise.all([
-                supabase.from('categories').select('*').order('created_at', { ascending: true }),
-                supabase.from('products').select('id, category_id'),
-            ]);
-            if (cErr) throw cErr;
-            if (pErr) console.error('[Products] product count query failed:', pErr);
-
+            const { categories: cData, productCounts: counts } = await catalog.loadCategories();
             setCategories(cData || []);
-            const counts = {};
-            (pData || []).forEach((row) => {
-                if (!row.category_id) return;
-                counts[row.category_id] = (counts[row.category_id] || 0) + 1;
-            });
-            setProductCounts(counts);
+            setProductCounts(counts || {});
         } catch (err) {
             console.error('[Products] load failed:', err);
             toast.error('Failed to load categories');
@@ -49,6 +43,7 @@ const Products = () => {
 
     useEffect(() => {
         load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const filtered = useMemo(() => {
@@ -86,10 +81,13 @@ const Products = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Admin · Catalog</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{portalLabel} · Catalog</p>
                     <h1 className="text-2xl font-display font-bold text-slate-900">Products</h1>
-                    <p className="text-slate-500 text-sm mt-0.5">Manage the product categories available across your Partner network.</p>
+                    <p className="text-slate-500 text-sm mt-0.5">
+                        {canManage ? 'Manage the product categories available across your Partner network.' : 'Product categories available across your Partner network.'}
+                    </p>
                 </div>
+                {canManage && (
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                     <button
                         onClick={() => navigate('/admin/products/bulk-import')}
@@ -104,6 +102,7 @@ const Products = () => {
                         <Plus size={16} /> Add Category
                     </button>
                 </div>
+                )}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -137,7 +136,7 @@ const Products = () => {
                     <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-soft">
                         <PackageOpen size={48} className="mx-auto text-slate-200 mb-4" />
                         <h3 className="text-lg font-bold text-slate-900">No Categories Found</h3>
-                        <p className="text-slate-400 text-sm mt-1">Try adjusting your search or filter, or add a new category.</p>
+                        <p className="text-slate-400 text-sm mt-1">Try adjusting your search or filter{canManage ? ', or add a new category' : ''}.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -147,14 +146,14 @@ const Products = () => {
                                 className={`bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden flex flex-col transition-all hover:shadow-md ${!category.is_active ? 'opacity-70' : ''
                                     }`}
                             >
-                                <Link to={`/admin/products/${category.id}`} className="h-40 relative block">
+                                <Link to={`${basePath}/${category.id}`} className="h-40 relative block">
                                     {category.image_url ? (
                                         <img src={category.image_url} alt={category.name} className="w-full h-full object-cover" />
                                     ) : (
                                         <ProductImageFallback category={category.name} />
                                     )}
                                     <span
-                                        className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${category.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                                        className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${category.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
                                             }`}
                                     >
                                         {category.is_active ? 'Active' : 'Inactive'}
@@ -163,7 +162,7 @@ const Products = () => {
 
                                 <div className="p-5 flex-1 flex flex-col gap-3">
                                     <div>
-                                        <Link to={`/admin/products/${category.id}`}>
+                                        <Link to={`${basePath}/${category.id}`}>
                                             <h3 className="font-bold text-slate-900 text-lg leading-tight hover:text-primary-600 transition-colors">
                                                 {category.name}
                                             </h3>
@@ -180,11 +179,12 @@ const Products = () => {
 
                                     <div className="mt-auto pt-3 flex gap-2">
                                         <Link
-                                            to={`/admin/products/${category.id}`}
+                                            to={`${basePath}/${category.id}`}
                                             className="flex-1 inline-flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-3 py-2.5 rounded-xl transition-all"
                                         >
                                             View Products <ChevronRight size={13} />
                                         </Link>
+                                        {canManage && (<>
                                         <button
                                             onClick={() => { setEditingCategory(category); setFormOpen(true); }}
                                             title="Edit"
@@ -201,6 +201,7 @@ const Products = () => {
                                         >
                                             <Power size={14} />
                                         </button>
+                                        </>)}
                                     </div>
                                 </div>
                             </div>
@@ -209,12 +210,14 @@ const Products = () => {
                 )}
             </div>
 
-            <CategoryFormModal
-                isOpen={formOpen}
-                onClose={() => setFormOpen(false)}
-                category={editingCategory}
-                onSaved={load}
-            />
+            {canManage && (
+                <CategoryFormModal
+                    isOpen={formOpen}
+                    onClose={() => setFormOpen(false)}
+                    category={editingCategory}
+                    onSaved={load}
+                />
+            )}
         </div>
     );
 };

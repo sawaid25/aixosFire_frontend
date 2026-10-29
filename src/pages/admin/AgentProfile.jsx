@@ -18,6 +18,7 @@ import {
 import PerformanceBadge from '../../components/admin/PerformanceBadge';
 import StatCard from '../../components/admin/StatCard';
 import { formatKsaDateTime, formatKsaTime } from '../../utils/dateTime';
+import AgentAvatar from '../../components/AgentAvatar';
 
 /* ─── Benchmark Configuration ─────────────────────────── */
 const BENCHMARK = {
@@ -314,7 +315,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
                 <div className="p-6 pb-4 flex items-start justify-between border-b border-slate-100 flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-amber-100 rounded-2xl">
-                            <Star size={18} className="text-amber-600" />
+                            <Star size={18} className="text-amber-700" />
                         </div>
                         <div>
                             <h3 className="text-xl font-black text-slate-900">
@@ -340,7 +341,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
                             {selected.map(a => (
                                 <span key={a.id} className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">
                                     {a.name}
-                                    <button onClick={() => toggleAgent(a)} className="text-amber-500 hover:text-amber-700 ml-0.5">
+                                    <button onClick={() => toggleAgent(a)} className="text-amber-700 hover:text-amber-700 ml-0.5">
                                         <X size={11} />
                                     </button>
                                 </span>
@@ -382,10 +383,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
                                     className={`w-full flex items-center gap-3 p-3 rounded-2xl border-2 transition-all text-left ${isChosen ? 'border-amber-400 bg-amber-50' : 'border-slate-100 hover:border-slate-300 bg-white'}`}
                                 >
                                     <div className="w-9 h-9 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
-                                        {agent.profile_photo
-                                            ? <img src={agent.profile_photo} alt={agent.name} className="w-full h-full object-cover" />
-                                            : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={16} /></div>
-                                        }
+                                        <AgentAvatar src={agent.profile_photo} alt={agent.name} iconSize={16} />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-bold text-slate-800 truncate">{agent.name}</p>
@@ -394,7 +392,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
                                     {agent.territory && (
                                         <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg hidden sm:block">{agent.territory}</span>
                                     )}
-                                    {isChosen && <CheckCircle size={18} className="text-amber-500 flex-shrink-0" />}
+                                    {isChosen && <CheckCircle size={18} className="text-amber-700 flex-shrink-0" />}
                                 </button>
                             );
                         })
@@ -427,7 +425,7 @@ const SeniorAgentModal = ({ isOpen, onClose, targetAgent, currentSeniorRecord, o
                         <button
                             onClick={isEdit ? handleUpdateTeam : handleSubmit}
                             disabled={submitting || (!isEdit && selected.length === 0)}
-                            className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="flex-1 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             {submitting ? (
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -455,7 +453,7 @@ const LoginAsAgentModal = ({ isOpen, onClose, agentName, submitting, onConfirm }
             <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-6">
                 <div className="flex items-center gap-3 mb-4">
                     <div className="p-2.5 bg-amber-100 rounded-2xl">
-                        <UserCog size={18} className="text-amber-600" />
+                        <UserCog size={18} className="text-amber-700" />
                     </div>
                     <h3 className="text-lg font-black text-slate-900">Login as {agentName}?</h3>
                 </div>
@@ -471,7 +469,7 @@ const LoginAsAgentModal = ({ isOpen, onClose, agentName, submitting, onConfirm }
                     <button
                         onClick={onConfirm}
                         disabled={submitting}
-                        className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-lg shadow-amber-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {submitting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>
                             <UserCog size={15} /> Login as Agent
@@ -727,10 +725,7 @@ const AgentProfile = () => {
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                 <div className="flex flex-col sm:flex-row gap-6 items-start">
                     <div className="w-20 h-20 rounded-2xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                        {agent.profile_photo
-                            ? <img src={agent.profile_photo} alt={agent.name} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={32} /></div>
-                        }
+                        <AgentAvatar src={agent.profile_photo} alt={agent.name} iconSize={32} />
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1007,7 +1002,7 @@ const AgentProfile = () => {
                             <p className="text-2xl font-bold text-slate-900 mt-1">{metrics.total}</p>
                         </div>
                         <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-5">
-                            <div className="p-2.5 rounded-xl bg-emerald-500 w-fit mb-3"><CheckCircle size={16} className="text-white" /></div>
+                            <div className="p-2.5 rounded-xl bg-emerald-600 w-fit mb-3"><CheckCircle size={16} className="text-white" /></div>
                             <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Within Benchmark</p>
                             <p className="text-2xl font-bold text-emerald-700 mt-1">{bmMetrics.withinCount}</p>
                         </div>
@@ -1025,7 +1020,7 @@ const AgentProfile = () => {
                             </div>
                         </div>
                         <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-5">
-                            <div className="p-2.5 rounded-xl bg-amber-500 w-fit mb-3"><Timer size={16} className="text-white" /></div>
+                            <div className="p-2.5 rounded-xl bg-amber-600 w-fit mb-3"><Timer size={16} className="text-white" /></div>
                             <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Avg Completion</p>
                             <p className="text-2xl font-bold text-slate-900 mt-1">{bmMetrics.avgDays}</p>
                             <p className="text-xs text-slate-400 mt-0.5">days average</p>
@@ -1123,9 +1118,9 @@ const AgentProfile = () => {
                                                         <p className="text-xs text-slate-400 mt-0.5">{formatKsaTime(inq.created_at)}</p>
                                                     </div>
                                                     <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                                                        <p className="text-xs text-amber-600 font-semibold mb-1">Benchmark Date</p>
+                                                        <p className="text-xs text-amber-700 font-semibold mb-1">Benchmark Date</p>
                                                         <p className="text-xs font-bold text-amber-800">{fmt(bm.benchmarkEnd)}</p>
-                                                        <p className="text-xs text-amber-500 mt-0.5">{bmConfig.label} limit</p>
+                                                        <p className="text-xs text-amber-700 mt-0.5">{bmConfig.label} limit</p>
                                                     </div>
                                                     <div className={`rounded-xl p-3 ${bm.closingDate ? (bm.withinBenchmark ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100') : 'bg-slate-50'}`}>
                                                         <p className={`text-xs font-semibold mb-1 ${bm.closingDate ? (bm.withinBenchmark ? 'text-emerald-600' : 'text-red-600') : 'text-slate-400'}`}>
@@ -1135,7 +1130,7 @@ const AgentProfile = () => {
                                                             {bm.closingDate ? fmt(bm.closingDate) : 'Not closed'}
                                                         </p>
                                                         {bm.durationDays && (
-                                                            <p className={`text-xs mt-0.5 ${bm.withinBenchmark ? 'text-emerald-500' : 'text-red-400'}`}>
+                                                            <p className={`text-xs mt-0.5 ${bm.withinBenchmark ? 'text-emerald-600' : 'text-red-400'}`}>
                                                                 {bm.durationDays}d to complete
                                                             </p>
                                                         )}
@@ -1153,7 +1148,7 @@ const AgentProfile = () => {
                                                 {bm.durationHours !== null && (
                                                     <div className="mt-3 flex items-center gap-2">
                                                         {bm.withinBenchmark
-                                                            ? <TrendingUp size={13} className="text-emerald-500 flex-shrink-0" />
+                                                            ? <TrendingUp size={13} className="text-emerald-600 flex-shrink-0" />
                                                             : <TrendingDown size={13} className="text-red-500 flex-shrink-0" />
                                                         }
                                                         <p className="text-xs text-slate-500">
@@ -1248,7 +1243,7 @@ const AgentProfile = () => {
                                             <div className="flex items-center justify-between px-5 py-4 bg-slate-50 border-b border-slate-100">
                                                 <div className="flex items-center gap-3">
                                                     <div className="p-2 bg-orange-100 rounded-xl">
-                                                        <MessageSquare size={15} className="text-orange-600" />
+                                                        <MessageSquare size={15} className="text-orange-700" />
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-bold text-slate-900">Complaint Thread</p>
@@ -1313,15 +1308,15 @@ const AgentProfile = () => {
                     {/* ── Hold History ── */}
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                         <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                            <AlertTriangle size={16} className="text-amber-500" />
+                            <AlertTriangle size={16} className="text-amber-700" />
                             Hold History
                         </h3>
                         {(agent.status || '').toLowerCase() === 'hold' ? (
                             <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
+                                <AlertTriangle size={16} className="text-amber-700 flex-shrink-0" />
                                 <div>
                                     <p className="text-sm font-bold text-amber-800">Agent is currently on hold</p>
-                                    <p className="text-xs text-amber-600 mt-0.5">
+                                    <p className="text-xs text-amber-700 mt-0.5">
                                         Last updated: {new Date(agent.updated_at || agent.created_at).toLocaleDateString()}
                                     </p>
                                 </div>

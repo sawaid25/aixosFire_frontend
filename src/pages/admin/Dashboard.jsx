@@ -121,7 +121,7 @@ const PipelineCard = ({ pending, inProgress, scheduled }) => (
         <div className="mt-3 pt-3 border-t border-slate-50 space-y-1.5">
             <div className="flex justify-between text-xs">
                 <span className="text-slate-400">Pending</span>
-                <span className="font-bold text-amber-600">{pending}</span>
+                <span className="font-bold text-amber-700">{pending}</span>
             </div>
             <div className="flex justify-between text-xs">
                 <span className="text-slate-400">In Progress</span>
@@ -600,7 +600,7 @@ const AdminDashboard = () => {
                 {[
                     { label:'Analytics',   to:'/admin/analytics',  icon:BarChart2,     bg:'bg-blue-50',    text:'text-blue-600' },
                     { label:'Agents',      to:'/admin/agents',     icon:Users,         bg:'bg-violet-50',  text:'text-violet-600' },
-                    { label:'Partners',    to:'/admin/partners',   icon:Handshake,     bg:'bg-orange-50',  text:'text-orange-600' },
+                    { label:'Partners',    to:'/admin/partners',   icon:Handshake,     bg:'bg-orange-50',  text:'text-orange-700' },
                     { label:'Customers',   to:'/admin/customers',  icon:UserPlus,      bg:'bg-sky-50',     text:'text-sky-600' },
                     { label:'Operations',  to:'/admin/operations', icon:Activity,      bg:'bg-teal-50',    text:'text-teal-600' },
                     { label:'Complaints',  to:'/admin/complaints', icon:MessageSquare, bg:'bg-red-50',     text:'text-red-600' },

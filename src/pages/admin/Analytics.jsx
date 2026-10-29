@@ -57,7 +57,7 @@ const Analytics = () => {
                         .order('created_at', { ascending: true }),
                     supabase.from('customers').select('id,created_at,status').order('created_at', { ascending: true }),
                     supabase.from('agents').select('id,name,territory,status').order('name'),
-                    supabase.from('partners').select('id,name,status').order('name'),
+                    supabase.from('partners').select('id,business_name,status').order('business_name'),
                 ]);
 
                 setRaw({
@@ -201,7 +201,7 @@ const Analytics = () => {
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                                 <YAxis axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                                 <Tooltip contentStyle={{ borderRadius:'12px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)' }}/>
-                                <Legend />
+                                <Legend formatter={(value) => <span className="text-slate-600">{value}</span>} />
                                 <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[4,4,0,0]} stackId="a"/>
                                 <Bar dataKey="pending"   name="Pending"   fill="#f59e0b" radius={[4,4,0,0]} stackId="a"/>
                                 <Bar dataKey="rejected"  name="Rejected"  fill="#ef4444" radius={[4,4,0,0]} stackId="a"/>
@@ -327,7 +327,7 @@ const Analytics = () => {
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                     <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center gap-2">
-                            <Award size={18} className="text-amber-500"/>
+                            <Award size={18} className="text-amber-700"/>
                             <h3 className="font-bold text-slate-900">Top Performing Agents</h3>
                         </div>
                         <Link to="/admin/agents" className="text-xs font-bold text-primary-600 hover:underline flex items-center gap-1">
@@ -391,7 +391,7 @@ const Analytics = () => {
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                             <YAxis axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                             <Tooltip contentStyle={{ borderRadius:'12px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)' }}/>
-                            <Legend />
+                            <Legend formatter={(value) => <span className="text-slate-600">{value}</span>} />
                             <Line type="monotone" dataKey="total"     name="Total"     stroke="#3b82f6" strokeWidth={2.5} dot={false}/>
                             <Line type="monotone" dataKey="completed" name="Completed"  stroke="#10b981" strokeWidth={2.5} dot={false}/>
                             <Line type="monotone" dataKey="pending"   name="Pending"    stroke="#f59e0b" strokeWidth={2}   dot={false} strokeDasharray="4 2"/>

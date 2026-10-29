@@ -533,7 +533,7 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
                 </div>
                 {isLocked && (
                   <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
-                    <div className="p-2 bg-emerald-500 text-white rounded-lg">
+                    <div className="p-2 bg-emerald-600 text-white rounded-lg">
                       <CheckCircle2 size={16} />
                     </div>
                     <p className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">Selection Locked — Inquiry Accepted</p>
@@ -546,16 +546,16 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
               <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 space-y-4 shadow-sm">
                 <div className="flex justify-between items-start gap-4">
                   <h4 className="font-bold text-amber-900 flex items-center gap-2 uppercase tracking-widest text-[10px]">
-                    <Info size={14} className="text-amber-600" /> Pickup strategy: {pickupTypeLabel}
+                    <Info size={14} className="text-amber-700" /> Pickup strategy: {pickupTypeLabel}
                   </h4>
                   {deliveryMode === 'partner' ? (
                     <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border ${deliveryStatus === 'agent_confirmed' || deliveryStatus === 'confirmed'
-                        ? 'bg-emerald-500 text-white border-emerald-400'
+                        ? 'bg-emerald-600 text-white border-emerald-400'
                         : deliveryStatus === 'partner_confirmed'
                           ? 'bg-blue-500 text-white border-blue-400'
                           : deliveryStatus === 'rejected'
                             ? 'bg-rose-500 text-white border-rose-400'
-                            : 'bg-amber-500 text-white border-amber-400'
+                            : 'bg-amber-600 text-white border-amber-400'
                       }`}>
                       {deliveryStatus === 'agent_confirmed' || deliveryStatus === 'confirmed' ? (
                         <span className="flex items-center gap-1.5"><CheckCircle2 size={10} /> Confirmed by Agent</span>
@@ -568,7 +568,7 @@ const RefillInquiryDetail = forwardRef(({ viewModel, onFinalized }, ref) => {
                       )}
                     </div>
                   ) : (
-                    <div className="px-2.5 py-1 rounded-lg bg-emerald-500 text-white border border-emerald-400 text-[9px] font-black uppercase tracking-tighter shadow-sm">
+                    <div className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white border border-emerald-400 text-[9px] font-black uppercase tracking-tighter shadow-sm">
                       <span className="flex items-center gap-1.5"><CheckCircle2 size={10} /> Handled by Agent</span>
                     </div>
                   )}

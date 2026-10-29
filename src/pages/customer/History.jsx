@@ -28,7 +28,7 @@ const ServiceTimeline = ({ status }) => {
                     <div key={step} className="flex flex-col items-center gap-2 bg-white px-2">
                         <div
                             className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
-                                isCompleted ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-300'
+                                isCompleted ? 'bg-green-600 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-300'
                             }`}
                         >
                             {isCompleted ? <CheckCircle size={14} /> : <div className="w-2 h-2 rounded-full bg-slate-200" />}
@@ -114,7 +114,7 @@ const History = () => {
         const styles = {
             Requested: 'bg-blue-50 text-blue-600 border-blue-200',
             Scheduled: 'bg-purple-50 text-purple-600 border-purple-200',
-            'In Progress': 'bg-orange-50 text-orange-600 border-orange-200',
+            'In Progress': 'bg-orange-50 text-orange-700 border-orange-200',
             Completed: 'bg-green-50 text-green-600 border-green-200',
             Cancelled: 'bg-red-50 text-red-600 border-red-200'
         };

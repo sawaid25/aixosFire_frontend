@@ -11,6 +11,7 @@ import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import ChatModal from '../../components/Chat/ChatModal';
 import { formatKsaDateTime } from '../../utils/dateTime';
+import { iconTone } from '../../constants/iconTones';
 
 let DefaultIcon = L.icon({
   iconUrl: icon,
@@ -23,11 +24,11 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const StatCard = ({ icon: Icon, title, value, subtext, color }) => (
   <div className="bg-white rounded-3xl p-6 shadow-soft border border-slate-100 hover:shadow-lg transition-all duration-300 group">
     <div className="flex justify-between items-start mb-4">
-      <div className={`p-3 rounded-2xl ${color} bg-opacity-10 transition-transform group-hover:scale-110`}>
-        <Icon size={24} className={color.replace('bg-', 'text-')} />
+      <div className={`p-3 rounded-2xl ${iconTone(color)} transition-transform group-hover:scale-110`}>
+        <Icon size={24} />
       </div>
       {subtext && (
-        <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
+        <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
           <TrendingUp size={12} /> {subtext}
         </span>
       )}
@@ -376,7 +377,7 @@ const AgentDashboard = () => {
         {/* Map Section */}
         <div className="bg-white rounded-3xl shadow-soft border border-slate-100 p-6 md:p-8 flex flex-col">
           <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-            <MapPin size={22} className="text-green-500" /> My Territory
+            <MapPin size={22} className="text-green-600" /> My Territory
           </h3>
           <div className="flex-1 rounded-2xl overflow-hidden relative min-h-[280px] md:min-h-[320px] bg-slate-100">
             <MapContainer

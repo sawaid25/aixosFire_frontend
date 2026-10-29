@@ -65,7 +65,7 @@ const SetPassword = () => {
 
                 {status === 'success' ? (
                     <div className="flex flex-col items-center gap-3 py-6 text-center">
-                        <CheckCircle2 size={48} className="text-green-500" />
+                        <CheckCircle2 size={48} className="text-green-600" />
                         <p className="font-semibold text-slate-800">{message}</p>
                         <p className="text-sm text-slate-500">Redirecting to login...</p>
                     </div>

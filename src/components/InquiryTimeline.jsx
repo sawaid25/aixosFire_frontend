@@ -71,7 +71,7 @@ const InquiryTimeline = ({ inquiryId, createdAt, fallbackEvents = [] }) => {
                 </div>
             ))}
             {failed && import.meta.env.DEV && (
-                <p className="text-[10px] text-amber-600">Event log unavailable — showing derived timeline.</p>
+                <p className="text-[10px] text-amber-700">Event log unavailable — showing derived timeline.</p>
             )}
         </div>
     );

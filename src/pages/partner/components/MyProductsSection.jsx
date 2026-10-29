@@ -20,10 +20,8 @@ const MyProductsSection = () => {
         <div className="bg-white rounded-3xl border border-slate-100 shadow-soft-xl overflow-hidden mt-6">
             <div className="p-6 md:p-8 border-b border-slate-100 flex items-start justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight italic">
-                        My <span className="text-primary-500">Products.</span>
-                    </h2>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    <h2 className="text-xl font-display font-bold text-slate-900">My Products</h2>
+                    <p className="text-sm text-slate-500 mt-1">
                         Made available to you by Admin
                     </p>
                 </div>

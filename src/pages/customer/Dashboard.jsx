@@ -285,7 +285,7 @@ const CustomerDashboard = () => {
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-soft">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Expiring soon</p>
-                    <p className="text-3xl font-black text-amber-600">{expiringSoonCount}</p>
+                    <p className="text-3xl font-black text-amber-700">{expiringSoonCount}</p>
                     <p className="text-xs text-slate-500 mt-2">Within {EXPIRY_ALERT_DAYS} days</p>
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-soft">

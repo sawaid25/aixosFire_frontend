@@ -136,11 +136,11 @@ const SeniorAgentActivate = () => {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-[2rem] shadow-xl p-8 max-w-sm w-full text-center space-y-4">
                 <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto">
-                    <CheckCircle size={28} className="text-green-500" />
+                    <CheckCircle size={28} className="text-green-600" />
                 </div>
                 <div>
                     <h2 className="text-2xl font-black text-slate-900">You're All Set!</h2>
-                    <p className="text-amber-600 font-bold text-sm mt-1">Senior Agent Account Activated</p>
+                    <p className="text-amber-700 font-bold text-sm mt-1">Senior Agent Account Activated</p>
                 </div>
                 <p className="text-slate-500 text-sm leading-relaxed">
                     Your 6-digit PIN has been saved securely. Log in to your agent account and visit <strong>Team Activity</strong> to manage your team.
@@ -216,7 +216,7 @@ const SeniorAgentActivate = () => {
                         )}
 
                         <div className="p-3 bg-amber-50 rounded-xl flex gap-2">
-                            <Lock size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <Lock size={14} className="text-amber-700 flex-shrink-0 mt-0.5" />
                             <p className="text-xs text-amber-700 font-medium leading-relaxed">
                                 Your PIN is hashed and stored securely. You will enter it each time you access Team Activity.
                             </p>

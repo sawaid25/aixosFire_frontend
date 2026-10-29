@@ -41,7 +41,7 @@ const ChatMessage = ({ message, isFromCurrentUser }) => {
     const getRoleLabelStyles = () => {
         switch (sender_type) {
             case 'customer': return 'text-blue-500';
-            case 'agent': return 'text-emerald-500';
+            case 'agent': return 'text-emerald-600';
             case 'partner': return 'text-purple-500';
             default: return 'text-slate-400';
         }

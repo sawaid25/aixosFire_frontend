@@ -222,11 +222,11 @@ const BulkImportProducts = () => {
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 {STEPS.map((s, idx) => (
                     <React.Fragment key={s.n}>
-                        <div className={`flex items-center gap-2 shrink-0 ${currentStep >= s.n ? 'text-slate-900' : 'text-slate-300'}`}>
+                        <div className={`flex items-center gap-2 shrink-0 ${currentStep >= s.n ? 'text-slate-900' : 'text-slate-400'}`}>
                             <span className={`w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center border ${
-                                currentStep > s.n ? 'bg-emerald-500 border-emerald-500 text-white'
+                                currentStep > s.n ? 'bg-emerald-600 border-emerald-500 text-white'
                                     : currentStep === s.n ? 'bg-slate-900 border-slate-900 text-white'
-                                        : 'border-slate-200 text-slate-300'
+                                        : 'border-slate-200 text-slate-400'
                             }`}>
                                 {currentStep > s.n ? '✓' : s.n}
                             </span>
@@ -317,7 +317,7 @@ const BulkImportProducts = () => {
                             </label>
                             {file && (
                                 <div className="flex items-center gap-2 text-sm text-slate-600">
-                                    <CheckCircle2 size={16} className="text-emerald-500" />
+                                    <CheckCircle2 size={16} className="text-emerald-600" />
                                     <span className="font-semibold">{file.name}</span>
                                     <span className="text-slate-400">({(file.size / 1024).toFixed(1)} KB)</span>
                                 </div>
@@ -391,7 +391,7 @@ const BulkImportProducts = () => {
                                 </div>
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center">
                                     <p className="text-2xl font-black text-amber-700">{validation.summary.update}</p>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mt-0.5">To update</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mt-0.5">To update</p>
                                 </div>
                                 <div className={`rounded-2xl border p-4 text-center ${validation.summary.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                                     <p className={`text-2xl font-black ${validation.summary.error ? 'text-red-700' : 'text-slate-500'}`}>{validation.summary.error}</p>
@@ -507,7 +507,7 @@ const BulkImportProducts = () => {
                     <p className="text-sm text-slate-500 mt-1">
                         {importResult.processed} product(s) processed —{' '}
                         <span className="text-emerald-600 font-bold">{importResult.created} created</span>,{' '}
-                        <span className="text-amber-600 font-bold">{importResult.updated} updated</span>, 0 errors.
+                        <span className="text-amber-700 font-bold">{importResult.updated} updated</span>, 0 errors.
                     </p>
                     <div className="mt-6 flex flex-wrap gap-3 justify-center">
                         <button

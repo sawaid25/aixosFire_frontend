@@ -7,13 +7,18 @@ import ProductImage from '../../components/products/ProductImage';
 import ProductFormModal from './components/ProductFormModal';
 import ManagePartnersModal from './components/ManagePartnersModal';
 import AddProductButton from './components/AddProductButton';
+import useCatalogPortal from '../../hooks/useCatalogPortal';
 import {
     Search, Pencil, Users, Power, PackageOpen, ArrowLeft, ChevronRight,
 } from 'lucide-react';
 
-/** Products belonging to one category — drills further into AdminProductDetail.jsx. */
+/**
+ * Products belonging to one category — drills further into AdminProductDetail.jsx.
+ * Shared by Admin (manage) and Internal Team (read-only) — see useCatalogPortal.
+ */
 const CategoryProducts = () => {
     const { categoryId } = useParams();
+    const { basePath, portalLabel, canManage, catalog } = useCatalogPortal();
     const [loading, setLoading] = useState(true);
     const [category, setCategory] = useState(null);
     const [products, setProducts] = useState([]);
@@ -29,34 +34,10 @@ const CategoryProducts = () => {
     const load = async () => {
         setLoading(true);
         try {
-            const [{ data: catData, error: catErr }, { data: pData, error: pErr }] = await Promise.all([
-                supabase.from('categories').select('*').eq('id', categoryId).maybeSingle(),
-                supabase.from('products').select('*').eq('category_id', categoryId).order('created_at', { ascending: true }),
-            ]);
-            if (catErr) throw catErr;
-            if (pErr) throw pErr;
-
+            const { category: catData, products: pData, assignedCounts: counts } = await catalog.loadCategory(categoryId);
             setCategory(catData);
             setProducts(pData || []);
-
-            const ids = (pData || []).map((p) => p.id);
-            if (ids.length) {
-                const { data: apData, error: apErr } = await supabase
-                    .from('partner_products')
-                    .select('product_id')
-                    .in('product_id', ids);
-                if (apErr) {
-                    console.error('[CategoryProducts] partner_products count query failed:', apErr);
-                } else {
-                    const counts = {};
-                    (apData || []).forEach((row) => {
-                        counts[row.product_id] = (counts[row.product_id] || 0) + 1;
-                    });
-                    setAssignedCounts(counts);
-                }
-            } else {
-                setAssignedCounts({});
-            }
+            setAssignedCounts(counts || {});
         } catch (err) {
             console.error('[CategoryProducts] load failed:', err);
             toast.error('Failed to load products');
@@ -111,7 +92,7 @@ const CategoryProducts = () => {
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-soft">
                 <PackageOpen size={48} className="mx-auto text-slate-200 mb-4" />
                 <h3 className="text-lg font-bold text-slate-900">Category not found</h3>
-                <Link to="/admin/products" className="text-primary-600 font-bold mt-4 inline-block underline">
+                <Link to={basePath} className="text-primary-600 font-bold mt-4 inline-block underline">
                     Back to Categories
                 </Link>
             </div>
@@ -121,7 +102,7 @@ const CategoryProducts = () => {
     return (
         <div className="space-y-6">
             <Link
-                to="/admin/products"
+                to={basePath}
                 className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-900 font-bold text-xs uppercase tracking-widest transition-colors"
             >
                 <ArrowLeft size={16} /> Back to Categories
@@ -129,11 +110,11 @@ const CategoryProducts = () => {
 
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Admin · Catalog</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{portalLabel} · Catalog</p>
                     <h1 className="text-2xl font-display font-bold text-slate-900">{category.name}</h1>
-                    <p className="text-slate-500 text-sm mt-0.5">{category.description || 'Manage products in this category.'}</p>
+                    <p className="text-slate-500 text-sm mt-0.5">{category.description || (canManage ? 'Manage products in this category.' : 'Products in this category.')}</p>
                 </div>
-                <AddProductButton onAddSingle={() => { setEditingProduct(null); setFormOpen(true); }} />
+                {canManage && <AddProductButton onAddSingle={() => { setEditingProduct(null); setFormOpen(true); }} />}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -164,7 +145,7 @@ const CategoryProducts = () => {
                 <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-soft">
                     <PackageOpen size={48} className="mx-auto text-slate-200 mb-4" />
                     <h3 className="text-lg font-bold text-slate-900">No Products Found</h3>
-                    <p className="text-slate-400 text-sm mt-1">Try adjusting your search or filter, or add a new product.</p>
+                    <p className="text-slate-400 text-sm mt-1">Try adjusting your search or filter{canManage ? ', or add a new product' : ''}.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -174,11 +155,11 @@ const CategoryProducts = () => {
                             className={`bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden flex flex-col transition-all hover:shadow-md ${!product.is_active ? 'opacity-70' : ''
                                 }`}
                         >
-                            <Link to={`/admin/products/${categoryId}/${product.id}`} className="h-40 relative block bg-slate-50">
+                            <Link to={`${basePath}/${categoryId}/${product.id}`} className="h-40 relative block bg-slate-50">
                                 <ProductImage src={product.image_url} alt={product.name} category={category.name} />
 
                                 <span
-                                    className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${product.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                                    className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${product.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
                                         }`}
                                 >
                                     {product.is_active ? 'Active' : 'Inactive'}
@@ -192,7 +173,7 @@ const CategoryProducts = () => {
                                             {[product.cat_no, product.model_number].filter(Boolean).join(' · ')}
                                         </p>
                                     )}
-                                    <Link to={`/admin/products/${categoryId}/${product.id}`}>
+                                    <Link to={`${basePath}/${categoryId}/${product.id}`}>
                                         <h3 className="font-bold text-slate-900 text-lg leading-tight hover:text-primary-600 transition-colors">
                                             {product.name}
                                         </h3>
@@ -209,11 +190,12 @@ const CategoryProducts = () => {
 
                                 <div className="mt-auto pt-3 flex gap-2">
                                     <Link
-                                        to={`/admin/products/${categoryId}/${product.id}`}
+                                        to={`${basePath}/${categoryId}/${product.id}`}
                                         className="flex-1 inline-flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest px-3 py-2.5 rounded-xl transition-all"
                                     >
                                         View Details <ChevronRight size={13} />
                                     </Link>
+                                    {canManage && (<>
                                     <button
                                         onClick={() => setPartnersModalProduct(product)}
                                         title="Assign to Partner"
@@ -237,6 +219,7 @@ const CategoryProducts = () => {
                                     >
                                         <Power size={14} />
                                     </button>
+                                    </>)}
                                 </div>
                             </div>
                         </div>
@@ -244,21 +227,25 @@ const CategoryProducts = () => {
                 </div>
             )}
 
-            <ProductFormModal
-                isOpen={formOpen}
-                onClose={() => setFormOpen(false)}
-                product={editingProduct}
-                categoryId={categoryId}
-                categoryName={category.name}
-                onSaved={load}
-            />
+            {canManage && (
+                <>
+                    <ProductFormModal
+                        isOpen={formOpen}
+                        onClose={() => setFormOpen(false)}
+                        product={editingProduct}
+                        categoryId={categoryId}
+                        categoryName={category.name}
+                        onSaved={load}
+                    />
 
-            <ManagePartnersModal
-                isOpen={Boolean(partnersModalProduct)}
-                onClose={() => setPartnersModalProduct(null)}
-                product={partnersModalProduct}
-                onSaved={load}
-            />
+                    <ManagePartnersModal
+                        isOpen={Boolean(partnersModalProduct)}
+                        onClose={() => setPartnersModalProduct(null)}
+                        product={partnersModalProduct}
+                        onSaved={load}
+                    />
+                </>
+            )}
         </div>
     );
 };

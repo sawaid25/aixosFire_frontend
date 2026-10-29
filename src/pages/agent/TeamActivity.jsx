@@ -8,6 +8,7 @@ import {
     Lock, Activity, Clock, Mail, User
 } from 'lucide-react';
 import { formatKsaDateTime } from '../../utils/dateTime';
+import AgentAvatar from '../../components/AgentAvatar';
 
 /* ─── Date helpers ─────────────────────────────── */
 const startOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
@@ -32,7 +33,7 @@ const NotActivatedScreen = () => (
     <div className="flex items-center justify-center min-h-[60vh]">
         <div className="bg-white rounded-[2rem] shadow-soft border border-slate-100 p-8 max-w-sm w-full text-center space-y-4">
             <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto">
-                <Mail size={22} className="text-amber-600" />
+                <Mail size={22} className="text-amber-700" />
             </div>
             <h2 className="text-xl font-black text-slate-900">Account Not Activated</h2>
             <p className="text-sm text-slate-500 leading-relaxed">
@@ -193,7 +194,7 @@ const PinGate = ({ onSuccess }) => {
             <div className="bg-white rounded-[2rem] shadow-soft border border-slate-100 p-8 max-w-sm w-full">
                 <div className="text-center mb-6">
                     <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                        <Lock size={22} className="text-amber-600" />
+                        <Lock size={22} className="text-amber-700" />
                     </div>
                     <h2 className="text-xl font-black text-slate-900">Enter Your PIN</h2>
                     <p className="text-sm text-slate-500 mt-1">Enter your 6-digit Senior Agent PIN to continue.</p>
@@ -432,7 +433,7 @@ const TeamActivity = () => {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
-                        <div className="p-1.5 bg-amber-100 rounded-lg"><Star size={16} className="text-amber-600" /></div>
+                        <div className="p-1.5 bg-amber-100 rounded-lg"><Star size={16} className="text-amber-700" /></div>
                         <h2 className="text-2xl font-black text-slate-900">Team Activity</h2>
                     </div>
                     <p className="text-slate-500 text-sm">{team.length} assigned agent{team.length !== 1 ? 's' : ''}</p>
@@ -498,10 +499,7 @@ const TeamActivity = () => {
                                 <div className="p-5">
                                     <div className="flex items-center gap-3 mb-4">
                                         <div className="w-11 h-11 rounded-2xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                                            {agent.profile_photo
-                                                ? <img src={agent.profile_photo} alt={agent.name} className="w-full h-full object-cover" />
-                                                : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={18} /></div>
-                                            }
+                                            <AgentAvatar src={agent.profile_photo} alt={agent.name} iconSize={18} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold text-slate-900 text-sm truncate">{agent.name}</p>

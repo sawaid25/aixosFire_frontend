@@ -6,11 +6,16 @@ import PageLoader from '../../components/PageLoader';
 import ProductImage from '../../components/products/ProductImage';
 import ProductFormModal from './components/ProductFormModal';
 import ManagePartnersModal from './components/ManagePartnersModal';
+import useCatalogPortal from '../../hooks/useCatalogPortal';
 import { ArrowLeft, Pencil, Users, Power, PackageOpen, Tag } from 'lucide-react';
 
-/** Full product detail — image, description, specs table, assigned partners. */
+/**
+ * Full product detail — image, description, specs table, assigned partners.
+ * Shared by Admin (manage) and Internal Team (read-only) — see useCatalogPortal.
+ */
 const AdminProductDetail = () => {
     const { categoryId, productId } = useParams();
+    const { basePath, canManage, catalog } = useCatalogPortal();
     const [loading, setLoading] = useState(true);
     const [category, setCategory] = useState(null);
     const [product, setProduct] = useState(null);
@@ -22,26 +27,10 @@ const AdminProductDetail = () => {
     const load = async () => {
         setLoading(true);
         try {
-            const [{ data: catData }, { data: prodData, error: prodErr }] = await Promise.all([
-                supabase.from('categories').select('*').eq('id', categoryId).maybeSingle(),
-                supabase.from('products').select('*').eq('id', productId).maybeSingle(),
-            ]);
-            if (prodErr) throw prodErr;
+            const { category: catData, product: prodData, partners: assigned } = await catalog.loadProduct(categoryId, productId);
             setCategory(catData);
             setProduct(prodData);
-
-            if (prodData) {
-                const { data: assignedData, error: assignedErr } = await supabase
-                    .from('partner_products')
-                    .select('assigned_at, partners(id, business_name, owner_name)')
-                    .eq('product_id', prodData.id)
-                    .order('assigned_at', { ascending: false });
-                if (assignedErr) {
-                    console.error('[AdminProductDetail] assigned partners query failed:', assignedErr);
-                } else {
-                    setPartners((assignedData || []).filter((r) => r.partners));
-                }
-            }
+            if (prodData) setPartners(assigned || []);
         } catch (err) {
             console.error('[AdminProductDetail] load failed:', err);
             toast.error('Failed to load product');
@@ -81,7 +70,7 @@ const AdminProductDetail = () => {
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-soft">
                 <PackageOpen size={48} className="mx-auto text-slate-200 mb-4" />
                 <h3 className="text-lg font-bold text-slate-900">Product not found</h3>
-                <Link to={`/admin/products/${categoryId}`} className="text-primary-600 font-bold mt-4 inline-block underline">
+                <Link to={`${basePath}/${categoryId}`} className="text-primary-600 font-bold mt-4 inline-block underline">
                     Back to {category?.name || 'Category'}
                 </Link>
             </div>
@@ -95,7 +84,7 @@ const AdminProductDetail = () => {
     return (
         <div className="space-y-6">
             <Link
-                to={`/admin/products/${categoryId}`}
+                to={`${basePath}/${categoryId}`}
                 className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-900 font-bold text-xs uppercase tracking-widest transition-colors"
             >
                 <ArrowLeft size={16} /> Back to {category?.name || 'Category'}
@@ -108,12 +97,13 @@ const AdminProductDetail = () => {
                         <ProductImage src={product.image_url} alt={product.name} category={category?.name} />
 
                         <span
-                            className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${product.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                            className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${product.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
                                 }`}
                         >
                             {product.is_active ? 'Active' : 'Inactive'}
                         </span>
                     </div>
+                    {canManage && (
                     <div className="flex flex-col gap-2">
                         <button
                             onClick={() => setFormOpen(true)}
@@ -136,6 +126,7 @@ const AdminProductDetail = () => {
                             <Power size={14} /> {product.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                     </div>
+                    )}
                 </div>
 
                 {/* Details */}
@@ -176,12 +167,14 @@ const AdminProductDetail = () => {
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6 md:p-8">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="font-bold text-slate-900">Assigned Partners ({partners.length})</h2>
-                            <button
-                                onClick={() => setPartnersModalOpen(true)}
-                                className="text-xs font-black text-primary-600 uppercase tracking-widest hover:text-primary-700"
-                            >
-                                Manage
-                            </button>
+                            {canManage && (
+                                <button
+                                    onClick={() => setPartnersModalOpen(true)}
+                                    className="text-xs font-black text-primary-600 uppercase tracking-widest hover:text-primary-700"
+                                >
+                                    Manage
+                                </button>
+                            )}
                         </div>
                         {partners.length === 0 ? (
                             <p className="text-sm text-slate-400 italic">Not assigned to any partner yet.</p>
@@ -203,21 +196,25 @@ const AdminProductDetail = () => {
                 </div>
             </div>
 
-            <ProductFormModal
-                isOpen={formOpen}
-                onClose={() => setFormOpen(false)}
-                product={product}
-                categoryId={categoryId}
-                categoryName={category?.name}
-                onSaved={load}
-            />
+            {canManage && (
+                <>
+                    <ProductFormModal
+                        isOpen={formOpen}
+                        onClose={() => setFormOpen(false)}
+                        product={product}
+                        categoryId={categoryId}
+                        categoryName={category?.name}
+                        onSaved={load}
+                    />
 
-            <ManagePartnersModal
-                isOpen={partnersModalOpen}
-                onClose={() => setPartnersModalOpen(false)}
-                product={product}
-                onSaved={load}
-            />
+                    <ManagePartnersModal
+                        isOpen={partnersModalOpen}
+                        onClose={() => setPartnersModalOpen(false)}
+                        product={product}
+                        onSaved={load}
+                    />
+                </>
+            )}
         </div>
     );
 };

@@ -113,7 +113,7 @@ const SiteVisitForm = ({ isOpen, onClose, inquiry, onSubmit }) => {
 
                                 {formData.file ? (
                                     <div className="p-6 border-2 border-emerald-100 bg-emerald-50/30 rounded-3xl flex items-center gap-4">
-                                        <div className="p-3 bg-white rounded-2xl text-emerald-500 shadow-sm">
+                                        <div className="p-3 bg-white rounded-2xl text-emerald-600 shadow-sm">
                                             <FileText size={24} />
                                         </div>
                                         <div className="flex-1 overflow-hidden">
@@ -176,7 +176,7 @@ const SiteVisitForm = ({ isOpen, onClose, inquiry, onSubmit }) => {
 
                     {step === 3 && (
                         <div className="py-12 text-center animate-in zoom-in-95 duration-500">
-                            <div className="w-24 h-24 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+                            <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
                                 <CheckCircle size={48} />
                             </div>
                             <h4 className="text-2xl font-black text-slate-900 tracking-tight">Survey Submitted!</h4>

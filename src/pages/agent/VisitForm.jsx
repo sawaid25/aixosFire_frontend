@@ -2436,7 +2436,7 @@ const VisitForm = () => {
               }`}>
               {locationModal.type === 'denied'
                 ? <Smartphone size={26} className="text-red-500" />
-                : <MapPin size={26} className={locationModal.type === 'prompt' ? 'text-primary-600' : 'text-amber-500'} />
+                : <MapPin size={26} className={locationModal.type === 'prompt' ? 'text-primary-600' : 'text-amber-700'} />
               }
             </div>
 
@@ -3523,7 +3523,7 @@ const VisitForm = () => {
                       <div className="col-span-4 mt-6 pt-4 border-t border-slate-200">
                         {ext.firefightingSystem === 'Other' || ext.material === 'Other' ? (
                           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 animate-fade-in">
-                            <AlertTriangle className="text-amber-600 mt-0.5" size={20} />
+                            <AlertTriangle className="text-amber-700 mt-0.5" size={20} />
                             <p className="text-sm text-amber-800 font-medium">
                               Price confirmation is currently not available for this material. Our team will confirm the price separately.
                             </p>
@@ -4048,7 +4048,7 @@ const VisitForm = () => {
                         <div className="col-span-4 mt-6 pt-4 border-t border-slate-200">
                           {ext.firefightingSystem === 'Other' || ext.material === 'Other' ? (
                             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 animate-fade-in">
-                              <AlertTriangle className="text-amber-600 mt-0.5" size={20} />
+                              <AlertTriangle className="text-amber-700 mt-0.5" size={20} />
                               <p className="text-sm text-amber-800 font-medium">
                                 Price confirmation is currently not available for this material. Our team will confirm the price separately.
                               </p>
@@ -4106,7 +4106,7 @@ const VisitForm = () => {
       {step === 3 && (
         <div className="bg-white p-4 md:p-8 rounded-3xl shadow-soft border border-slate-100 animate-fade-in">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
-            <div className="p-2 bg-yellow-100 rounded-lg text-yellow-600"><AlertTriangle size={24} /></div>
+            <div className="p-2 bg-yellow-100 rounded-lg text-yellow-700"><AlertTriangle size={24} /></div>
             <div>
               <h3 className="text-xl font-bold text-slate-900">Site Assessment</h3>
               <p className="text-sm text-slate-500">Evaluate risks and make service recommendations.</p>

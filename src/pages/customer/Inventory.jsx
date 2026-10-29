@@ -132,7 +132,7 @@ const Inventory = () => {
                                         <td className="px-6 py-4 font-mono text-sm text-slate-600">#{item.extinguisher_id ?? item.id}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                                                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center">
                                                     <FireExtinguisher size={16} />
                                                 </div>
                                                 <div>

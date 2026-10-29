@@ -148,7 +148,7 @@ const PartnerProductDetail = () => {
                         <ProductImage src={product.image_url} alt={product.name} category={product.category} />
                         <span
                             className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${
-                                product.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                                product.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-500 text-white'
                             }`}
                         >
                             {product.is_active ? 'Active' : 'Inactive'}

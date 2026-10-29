@@ -159,7 +159,7 @@ const AdminServices = () => {
                                             </select>
                                         ) : (
                                             <div
-                                                className={`flex items-center gap-2 ${!service.agent_name ? 'text-orange-500 cursor-pointer hover:underline' : 'text-slate-700'}`}
+                                                className={`flex items-center gap-2 ${!service.agent_name ? 'text-orange-700 cursor-pointer hover:underline' : 'text-slate-700'}`}
                                                 onClick={() => !service.agent_name && setAssigningId(service.id)}
                                             >
                                                 <Briefcase size={14} />

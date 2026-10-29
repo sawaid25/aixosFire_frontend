@@ -1,11 +1,17 @@
 import React, { useContext, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Mail, Lock, AlertCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, AlertCircle, ArrowLeft, Eye, EyeOff, CheckCircle } from 'lucide-react';
+
+// Internal team members land on their own portal; every other role uses /<role>/dashboard.
+const dashboardPathFor = (role) => (role === 'internal_team' ? '/team/dashboard' : `/${role}/dashboard`);
 
 const LoginPage = () => {
     const { role } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const notice = location.state?.notice;
+    const isTeam = role === 'internal_team';
     const auth = useContext(AuthContext);
     const login = auth?.login;
 
@@ -24,7 +30,7 @@ const LoginPage = () => {
 
         if (result.success) {
             setLoading(false);
-            navigate(`/${role}/dashboard`);
+            navigate(dashboardPathFor(role));
         } else {
             setError(result.error);
             setLoading(false);
@@ -35,6 +41,7 @@ const LoginPage = () => {
         if (role === 'agent') return { title: 'Agent Portal', sub: 'Log visits and track earnings', bg: 'bg-red-600' };
         if (role === 'customer') return { title: 'Client Portal', sub: 'Manage your safety compliance', bg: 'bg-slate-900' };
         if (role === 'partner') return { title: 'Partner Portal', sub: 'Manage inquiries and delivery coordination', bg: 'bg-slate-800' };
+        if (isTeam) return { title: 'Internal Team', sub: 'Operations access assigned by your Admin', bg: 'bg-slate-900' };
         return { title: 'Admin Console', sub: 'Platform management', bg: 'bg-slate-800' };
     };
 
@@ -102,6 +109,14 @@ const LoginPage = () => {
                         <h3 className="text-xl font-bold text-slate-900 mb-6">Sign in to your account</h3>
 
                         <form className="space-y-6" onSubmit={handleSubmit}>
+                            {notice && !error && (
+                                <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-lg">
+                                    <div className="flex">
+                                        <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                                        <p className="ml-3 text-sm text-emerald-800 font-medium">{notice}</p>
+                                    </div>
+                                </div>
+                            )}
                             {error && (
                                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
                                     <div className="flex">
@@ -153,11 +168,15 @@ const LoginPage = () => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-end">
-                                <Link to={`/forgot-password/${role}`} className="text-sm font-medium text-primary-600 hover:text-primary-500">
-                                    Forgot password?
-                                </Link>
-                            </div>
+                            {isTeam ? (
+                                <p className="text-xs text-slate-500">Forgot your password? Ask an Admin to help you regain access.</p>
+                            ) : (
+                                <div className="flex items-center justify-end">
+                                    <Link to={`/forgot-password/${role}`} className="text-sm font-medium text-primary-600 hover:text-primary-500">
+                                        Forgot password?
+                                    </Link>
+                                </div>
+                            )}
 
                             <button
                                 type="submit"
@@ -169,12 +188,19 @@ const LoginPage = () => {
                         </form>
 
                         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                            <p className="text-sm text-slate-500">
-                                Don't have an account?{' '}
-                                <Link to={`/register/${role}`} className="font-semibold text-primary-600 hover:text-primary-700">
-                                    Create one now
-                                </Link>
-                            </p>
+                            {isTeam ? (
+                                // Internal Team accounts are invitation-only (no self sign-up).
+                                <p className="text-sm text-slate-500">
+                                    No account yet? Internal Team access is by invitation — ask an Admin to invite you.
+                                </p>
+                            ) : (
+                                <p className="text-sm text-slate-500">
+                                    Don't have an account?{' '}
+                                    <Link to={`/register/${role}`} className="font-semibold text-primary-600 hover:text-primary-700">
+                                        Create one now
+                                    </Link>
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>

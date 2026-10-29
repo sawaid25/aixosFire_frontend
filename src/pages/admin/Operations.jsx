@@ -174,14 +174,14 @@ const Operations = () => {
                 {/* AI Bot + Escalation Flow */}
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                     <h3 className="font-bold text-slate-900 mb-5 flex items-center gap-2">
-                        <Zap size={16} className="text-amber-500"/> Complaint & Escalation Flow
+                        <Zap size={16} className="text-amber-700"/> Complaint & Escalation Flow
                     </h3>
                     <div className="space-y-3">
                         {/* Flow steps */}
                         {[
                             { icon: MessageSquare, label: 'Customer Submits Complaint', desc: 'Via app chat window', color: 'bg-blue-50 text-blue-600', status: 'Intake' },
                             { icon: Bot,           label: 'AI Bot Handles Query',       desc: 'FAQ & status checks', color: 'bg-violet-50 text-violet-600', status: 'Auto' },
-                            { icon: UserCheck,     label: 'Human Agent Takes Over',    desc: 'If bot unresolved', color: 'bg-amber-50 text-amber-600', status: 'Escalate' },
+                            { icon: UserCheck,     label: 'Human Agent Takes Over',    desc: 'If bot unresolved', color: 'bg-amber-50 text-amber-700', status: 'Escalate' },
                             { icon: Shield,        label: 'Admin Review & Resolution', desc: 'Complex & priority cases', color: 'bg-red-50 text-red-600', status: 'Final' },
                         ].map(({ icon: Icon, label, desc, color, status }, i) => (
                             <div key={i} className="flex items-start gap-3">
@@ -282,7 +282,7 @@ const Operations = () => {
                                     <p className="text-xs text-slate-400 truncate">{agent.territory || 'No zone'}</p>
                                 </div>
                                 <div className="text-right flex-shrink-0">
-                                    <p className="text-xs font-bold text-amber-600">{active} active</p>
+                                    <p className="text-xs font-bold text-amber-700">{active} active</p>
                                     <p className="text-xs text-slate-400">{pending} pending</p>
                                 </div>
                             </Link>

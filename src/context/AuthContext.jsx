@@ -2,6 +2,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { flushSync } from 'react-dom';
 import { API_URL } from '../api/client';
+import { getTeamMe } from '../api/team';
 import { AGENT_STATUS, agentLoginBlockedMessage, fetchAgentApprovalStatus, fetchSeniorAgentStatus } from '../constants/agentApprovalStatus';
 
 export const AuthContext = createContext(undefined);
@@ -69,6 +70,23 @@ export const AuthProvider = ({ children }) => {
             setUser({ ...parsed, role: storedRole, is_senior_agent: isSeniorAgent });
             return;
           }
+          if (storedRole === 'internal_team') {
+            // Status and permissions live on the backend; a stored copy may be stale
+            // (deactivated, pages removed), so re-read it before showing anything.
+            try {
+              const me = await getTeamMe();
+              localStorage.setItem('user', JSON.stringify(me));
+              setUser({ ...me, role: storedRole });
+            } catch (err) {
+              const code = err?.response?.status;
+              if (code === 401 || code === 403) {
+                clearSession();
+                return;
+              }
+              setUser({ ...parsed, role: storedRole });
+            }
+            return;
+          }
           setUser({ ...parsed, role: storedRole });
         }
       } catch (err) {
@@ -90,6 +108,32 @@ export const AuthProvider = ({ children }) => {
     };
     window.addEventListener('impersonation-expired', handleExpired);
     return () => window.removeEventListener('impersonation-expired', handleExpired);
+  }, []);
+
+  // Internal team: the API client dispatches these when the backend says the member's
+  // account is no longer active, or that a page they tried was removed.
+  const refreshTeamMember = async () => {
+    if (localStorage.getItem('role') !== 'internal_team') return;
+    try {
+      const me = await getTeamMe();
+      localStorage.setItem('user', JSON.stringify(me));
+      setUser({ ...me, role: 'internal_team' });
+    } catch {
+      // A revoked account is handled by the 'team-access-revoked' event.
+    }
+  };
+
+  useEffect(() => {
+    const handleRevoked = () => {
+      if (localStorage.getItem('role') === 'internal_team') clearSession();
+    };
+    const handleChanged = () => { refreshTeamMember(); };
+    window.addEventListener('team-access-revoked', handleRevoked);
+    window.addEventListener('team-permissions-changed', handleChanged);
+    return () => {
+      window.removeEventListener('team-access-revoked', handleRevoked);
+      window.removeEventListener('team-permissions-changed', handleChanged);
+    };
   }, []);
 
   const restoreAdminSession = ({ silent } = {}) => {
@@ -195,6 +239,13 @@ export const AuthProvider = ({ children }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         };
+      } else if (role === 'internal_team') {
+        url = `${API_URL}/auth/register/internal-team`;
+        options = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        };
       } else {
         return { success: false, error: 'Invalid role' };
       }
@@ -280,7 +331,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, impersonation, startImpersonation, endImpersonation }}>
+    <AuthContext.Provider value={{ user, login, register, logout, loading, impersonation, startImpersonation, endImpersonation, refreshTeamMember }}>
       {!loading && children}
     </AuthContext.Provider>
   );

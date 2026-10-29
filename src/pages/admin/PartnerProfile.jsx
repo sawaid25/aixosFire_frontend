@@ -253,7 +253,7 @@ const PartnerProfile = () => {
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft p-6">
                 <div className="flex flex-col sm:flex-row gap-5 items-start">
                     <div className="w-16 h-16 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
-                        <Handshake size={28} className="text-orange-500"/>
+                        <Handshake size={28} className="text-orange-700"/>
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-3">

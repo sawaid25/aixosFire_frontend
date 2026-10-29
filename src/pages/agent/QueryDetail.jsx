@@ -272,7 +272,7 @@ const QueryDetail = () => {
             {query.delivery_mode === 'partner' && (
                 <div className={`rounded-2xl border p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 ${query.delivery_status === 'pending' ? 'bg-amber-50 border-amber-200' : query.delivery_status === 'confirmed' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
                     <div className="flex items-start gap-4">
-                        <div className={`p-4 rounded-2xl ${query.delivery_status === 'pending' ? 'bg-amber-100 text-amber-600' : query.delivery_status === 'confirmed' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                        <div className={`p-4 rounded-2xl ${query.delivery_status === 'pending' ? 'bg-amber-100 text-amber-700' : query.delivery_status === 'confirmed' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
                             <Truck size={24} />
                         </div>
                         <div className="space-y-1">
@@ -574,7 +574,7 @@ const QueryDetail = () => {
                     {quotation && (
                         <section className="bg-white rounded-3xl border p-6 space-y-6">
                             <div className="flex items-center gap-2">
-                                <DollarSign className="text-emerald-500" size={20} />
+                                <DollarSign className="text-emerald-600" size={20} />
                                 <h2 className="font-bold">Partner Quotation</h2>
                             </div>
                             <div>

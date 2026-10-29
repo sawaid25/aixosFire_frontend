@@ -137,7 +137,7 @@ const PartnerActionCard = ({ onAccept, onAcceptWithDelivery, onReject, disabled,
                     type="button"
                     onClick={onAccept}
                     disabled={disabled}
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-4 rounded-full transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-4 rounded-full transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
                 >
                     <CheckCircle size={22} className="shrink-0" strokeWidth={2.5} />
                     Accept inquiry
@@ -148,7 +148,7 @@ const PartnerActionCard = ({ onAccept, onAcceptWithDelivery, onReject, disabled,
                         type="button"
                         onClick={onAccept}
                         disabled={disabled}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-4 rounded-full transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-emerald-200/80 text-white font-black py-4 rounded-full transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
                     >
                         <Truck size={22} className="shrink-0" strokeWidth={2.5} />
                         Agent Delivery

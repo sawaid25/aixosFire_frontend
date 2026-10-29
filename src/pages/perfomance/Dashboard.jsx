@@ -15,14 +15,15 @@ import {
 import { ClipboardList, DollarSign, RefreshCcw, Layers } from "lucide-react";
 import { Link } from 'react-router-dom';
 import PageLoader from "../../components/PageLoader";
+import { iconTone } from '../../constants/iconTones';
 
 /* ---------- Reusable Stat Card ---------- */
 const StatCard = ({ icon, title, value, color }) => {
   const IconComponent = icon;
   return (
     <div className="bg-white rounded-3xl p-6 shadow-soft border border-slate-100">
-      <div className={`p-3 rounded-2xl ${color} bg-opacity-10 w-fit mb-4`}>
-        <IconComponent size={22} className={color.replace("bg-", "text-")} />
+      <div className={`p-3 rounded-2xl ${iconTone(color)} w-fit mb-4`}>
+        <IconComponent size={22} />
       </div>
       <p className="text-sm text-slate-500">{title}</p>
       <h3 className="text-3xl font-bold text-slate-900">{value}</h3>
@@ -82,7 +83,7 @@ const PerformanceDetailCard = ({ row, isTotal = false }) => {
           </div>
           <div className="text-right">
             <p className="text-xs text-slate-500">Value</p>
-            <p className="text-lg font-semibold text-orange-600 mt-1">
+            <p className="text-lg font-semibold text-orange-700 mt-1">
               SAR {row.value.toLocaleString()}
             </p>
           </div>
@@ -331,10 +332,10 @@ const AgentPerformance = () => {
                         {row.closed}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-center font-semibold text-orange-600">
+                    <td className="px-5 py-4 text-center font-semibold text-orange-700">
                       {row.quantity}
                     </td>
-                    <td className="px-5 py-4 text-right font-semibold text-orange-600">
+                    <td className="px-5 py-4 text-right font-semibold text-orange-700">
                       SAR {row.value}
                     </td>
                   </tr>
@@ -356,7 +357,7 @@ const AgentPerformance = () => {
                 <td className="px-5 py-4 text-center">
                   {tableData.reduce((sum, r) => sum + r.quantity, 0)}
                 </td>
-                <td className="px-5 py-4 text-right text-orange-600">
+                <td className="px-5 py-4 text-right text-orange-700">
                   SAR {tableData.reduce((sum, r) => sum + r.value, 0)}
                 </td>
               </tr>

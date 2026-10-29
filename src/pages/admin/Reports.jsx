@@ -37,12 +37,12 @@ const Reports = () => {
                     { data: partners },
                 ] = await Promise.all([
                     supabase.from('inquiries')
-                        .select('id,inquiry_no,type,status,created_at,agent_id,partner_id,agents(name),partners(name),customers(business_name)')
+                        .select('id,inquiry_no,type,status,created_at,agent_id,partner_id,agents(name),partners(business_name),customers(business_name)')
                         .gte('created_at', cutoff)
                         .order('created_at', { ascending: false }),
                     supabase.from('agents').select('id,name,territory,status'),
                     supabase.from('customers').select('id,business_name,created_at,status'),
-                    supabase.from('partners').select('id,name,status'),
+                    supabase.from('partners').select('id,business_name,status'),
                 ]);
                 setData({ inquiries: inquiries||[], agents: agents||[], customers: customers||[], partners: partners||[] });
             } catch (err) {
@@ -97,7 +97,7 @@ const Reports = () => {
         const partnerMap = {};
         inquiries.forEach(i => {
             if (!i.partner_id) return;
-            if (!partnerMap[i.partner_id]) partnerMap[i.partner_id] = { id: i.partner_id, name: i.partners?.name||'Unknown', total: 0, accepted: 0, rejected: 0 };
+            if (!partnerMap[i.partner_id]) partnerMap[i.partner_id] = { id: i.partner_id, name: i.partners?.business_name||'Unknown', total: 0, accepted: 0, rejected: 0 };
             partnerMap[i.partner_id].total += 1;
             const s = (i.status||'').toLowerCase();
             if (['completed','accepted','closed'].includes(s)) partnerMap[i.partner_id].accepted += 1;
@@ -218,7 +218,7 @@ const Reports = () => {
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                             <YAxis axisLine={false} tickLine={false} tick={{ fill:'#94a3b8', fontSize:11 }}/>
                             <Tooltip contentStyle={{ borderRadius:'12px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)' }}/>
-                            <Legend />
+                            <Legend formatter={(value) => <span className="text-slate-600">{value}</span>} />
                             <Area type="monotone" dataKey="revenue" name="Revenue (SAR)" stroke="#10b981" strokeWidth={2.5} fill="url(#rRev)"/>
                             <Area type="monotone" dataKey="completed" name="Completed" stroke="#3b82f6" strokeWidth={2} fill="url(#rInq)"/>
                         </AreaChart>
@@ -273,7 +273,7 @@ const Reports = () => {
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden">
                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                            <Handshake size={15} className="text-orange-500"/> Partner Performance Report
+                            <Handshake size={15} className="text-orange-700"/> Partner Performance Report
                         </h3>
                         <span className="text-xs text-slate-400">{report.partnerPerf.length} partners</span>
                     </div>

@@ -53,7 +53,7 @@ const AddProductButton = ({ onAddSingle }) => {
                         onClick={() => { setOpen(false); onAddSingle?.(); }}
                         className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                     >
-                        <span className="p-2 rounded-xl bg-orange-100 text-orange-600 shrink-0">
+                        <span className="p-2 rounded-xl bg-orange-100 text-orange-700 shrink-0">
                             <PackagePlus size={16} />
                         </span>
                         <span>

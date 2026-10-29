@@ -104,7 +104,7 @@ const InquiryCard = ({ inq }) => (
         <div className="flex items-center justify-between text-sm">
             <span className={`px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-widest ${(inq.type || inq.inquiry_type) === 'Validation' ? 'bg-blue-50 text-blue-600' :
                     (inq.type || inq.inquiry_type) === 'Refilled' ? 'bg-purple-50 text-purple-600' :
-                        (inq.type || inq.inquiry_type) === 'New Unit' ? 'bg-amber-50 text-amber-600' :
+                        (inq.type || inq.inquiry_type) === 'New Unit' ? 'bg-amber-50 text-amber-700' :
                             'bg-emerald-50 text-emerald-600'
                 }`}>
                 {inq.type || inq.inquiry_type || 'Unknown'}
@@ -263,10 +263,8 @@ const PartnerDashboard = () => {
             <div className="bg-white rounded-3xl border border-slate-100 shadow-soft-xl overflow-hidden">
                 <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
-                        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight italic">
-                            All <span className="text-primary-500">Inquiries.</span>
-                        </h2>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        <h2 className="text-xl font-display font-bold text-slate-900">All Inquiries</h2>
+                        <p className="text-sm text-slate-500 mt-1">
                             {loading ? 'Loading results…' : `Showing ${inquiries.length} results`}
                         </p>
                     </div>
@@ -321,7 +319,7 @@ const PartnerDashboard = () => {
                                     <td className="px-6 md:px-8 py-6">
                                         <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${(inq.type || inq.inquiry_type) === 'Validation' ? 'bg-blue-50 text-blue-600' :
                                                 (inq.type || inq.inquiry_type) === 'Refilled' ? 'bg-purple-50 text-purple-600' :
-                                                    (inq.type || inq.inquiry_type) === 'New Unit' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                                                    (inq.type || inq.inquiry_type) === 'New Unit' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-600'
                                             }`}>
                                             {inq.type || inq.inquiry_type || 'Unknown'}
                                         </span>

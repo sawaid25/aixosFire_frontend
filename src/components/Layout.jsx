@@ -2,11 +2,40 @@ import React, { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog, Package, SlidersHorizontal, Inbox } from 'lucide-react';
+import { LogOut, LayoutDashboard, Calendar, FileText, User, ShoppingBag, Map, Shield, Bookmark, FireExtinguisher, Clock, Menu, X, Tag, Bot, MessageSquare, BarChart2, Handshake, Wrench, FileBarChart, Users, Star, UserCog, Package, SlidersHorizontal, Inbox, KeyRound } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useLocationTracker from '../hooks/useLocationTracker';
 import NotificationBell from './NotificationBell';
 import ChatModal from './Chat/ChatModal';
+import { permittedTeamModules } from '../constants/teamPermissions';
+
+// Top-bar page title. Detail pages have no sidebar entry, so they're named by what they
+// show; every other page uses its sidebar label. Never prints a raw id from the URL.
+const ID_SEGMENT = /^([0-9a-f]{8}-[0-9a-f-]{27}|\d+)$/i;
+const ID = '(?:[0-9a-f]{8}-[0-9a-f-]{27}|[0-9]+)';
+const DETAIL_TITLES = [
+    [/\/site-assessment$/, 'Site Assessment'],
+    [new RegExp(`/(inquiry|inquiries)/${ID}/items?/${ID}$`, 'i'), 'Inquiry Item'],
+    [new RegExp(`/(inquiry|inquiries|query)/${ID}$`, 'i'), 'Inquiry Details'],
+    [new RegExp(`/products/${ID}/${ID}$`, 'i'), 'Product Details'],
+    [new RegExp(`/products/${ID}$`, 'i'), 'Product Category'],
+    [new RegExp(`/agents/${ID}$`, 'i'), 'Agent Profile'],
+    [new RegExp(`/customers?/${ID}$`, 'i'), 'Customer Details'],
+    [new RegExp(`/partners/${ID}$`, 'i'), 'Partner Profile'],
+    [new RegExp(`/team/${ID}$`, 'i'), 'Team Member'],
+    [/\/products\/bulk-import$/, 'Bulk Import'],
+    [/\/performance\/[^/]+$/, 'Performance'],
+];
+const pageTitleFor = (pathname, navItems) => {
+    const detail = DETAIL_TITLES.find(([re]) => re.test(pathname));
+    if (detail) return detail[1];
+    const nav = navItems
+        .filter((i) => pathname === i.to || pathname.startsWith(`${i.to}/`))
+        .sort((a, b) => b.to.length - a.to.length)[0];
+    if (nav) return nav.label;
+    const segment = pathname.split('/').filter((x) => x && !ID_SEGMENT.test(x)).pop() || '';
+    return segment.replace(/-/g, ' ');
+};
 
 const SidebarItem = ({ icon: Icon, label, to, active }) => (
     <Link to={to} className={`flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all duration-200 group ${active ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
@@ -93,6 +122,10 @@ const Layout = ({ children }) => {
     // the same progressive way the rest of the app already does when a field is
     // missing, ending on the role label rather than a hardcoded string.
     const partnerDisplayName = user?.name || user?.business_name || user?.owner_name || 'Partner';
+    // Sidebar profile card — partners have business_name / owner_name instead of name.
+    const profileName = user?.name || user?.business_name || user?.owner_name || user?.email || '';
+    // Internal team members show their Admin-assigned designation instead of the raw role key.
+    const profileRole = role === 'internal_team' ? (user?.designation || 'Internal Team') : user?.role;
 
     // Define navigation items based on role
     const getNavItems = () => {
@@ -126,6 +159,7 @@ const Layout = ({ children }) => {
                 { icon: Handshake,       label: 'Partners',         to: '/admin/partners',    group: 'Management' },
                 { icon: Package,         label: 'Products',         to: '/admin/products',    group: 'Management' },
                 { icon: Users,           label: 'Customers',        to: '/admin/customers',   group: 'Management' },
+                { icon: KeyRound,        label: 'Access Requests',  to: '/admin/access-requests', group: 'Management' },
                 { icon: SlidersHorizontal, label: 'Service Manage', to: '/admin/service-manage', group: 'Management' },
                 { icon: Bookmark,        label: 'Service Queue',    to: '/admin/services',    group: 'Operations' },
                 { icon: Inbox,           label: 'General Inquiries', to: '/admin/general-inquiries', group: 'Operations' },
@@ -133,6 +167,12 @@ const Layout = ({ children }) => {
                 { icon: Map,             label: 'Global Map',       to: '/admin/map',         group: 'Operations' },
                 { icon: MessageSquare,   label: 'Complaints',       to: '/admin/complaints',  group: 'Support' },
                 { icon: FileBarChart,    label: 'Reports',          to: '/admin/reports',     group: 'Support' },
+            ];
+        } else if (role === 'internal_team') {
+            // Only the pages Admin granted; the backend re-checks each one on every request.
+            return [
+                { icon: LayoutDashboard, label: 'Dashboard', to: '/team/dashboard' },
+                ...permittedTeamModules(user).map(({ icon, label, to }) => ({ icon, label, to })),
             ];
         } else if (role === 'partner') {
             return [
@@ -152,6 +192,8 @@ const Layout = ({ children }) => {
         navigate('/');
     };
 
+    const pageTitle = pageTitleFor(location.pathname, getNavItems());
+
     return (
         <div className="flex flex-col h-screen bg-slate-50 font-sans">
             {impersonation && <ImpersonationBanner impersonation={impersonation} onReturnToAdmin={handleReturnToAdmin} />}
@@ -165,7 +207,7 @@ const Layout = ({ children }) => {
             )}
 
             {/* Mobile Sidebar Drawer */}
-            <div className={`fixed inset-y-0 left-0 w-72 bg-slate-900 z-50 md:hidden transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className={`fixed inset-y-0 left-0 w-72 bg-slate-900 z-50 md:hidden transform transition-transform duration-300 ease-in-out flex flex-col ${isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full shadow-none'}`}>
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/10 rounded-full blur-3xl"></div>
                 
                 <div className="p-6 relative z-10 flex justify-between items-center border-b border-slate-800">
@@ -187,7 +229,7 @@ const Layout = ({ children }) => {
 
                 {role === 'partner' && (
                     <div className="px-6 pt-4 pb-1 relative z-10">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Partner</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Partner</p>
                         {loading ? (
                             <div className="h-4 w-32 bg-slate-800 rounded animate-pulse" />
                         ) : (
@@ -203,7 +245,7 @@ const Layout = ({ children }) => {
                         if (!groups.length) {
                             return (
                                 <div className="space-y-1.5">
-                                    <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Main Menu</p>
+                                    <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Main Menu</p>
                                     {items.map((item, idx) => (
                                         <div key={idx} onClick={() => setIsMobileMenuOpen(false)}>
                                             <SidebarItem {...item} active={location.pathname === item.to || location.pathname.startsWith(item.to + '/')} />
@@ -214,7 +256,7 @@ const Layout = ({ children }) => {
                         }
                         return groups.map(group => (
                             <div key={group} className="mb-4">
-                                <p className="px-4 text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em] mb-2">{group}</p>
+                                <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">{group}</p>
                                 <div className="space-y-1">
                                     {items.filter(i => i.group === group).map((item, idx) => (
                                         <div key={idx} onClick={() => setIsMobileMenuOpen(false)}>
@@ -234,7 +276,7 @@ const Layout = ({ children }) => {
                         </div>
                         <div className="overflow-hidden">
                             <p className="text-xs font-bold text-white truncate">{user?.name}</p>
-                            <p className="text-[10px] text-slate-400 capitalize">{user?.role}</p>
+                            <p className="text-[10px] text-slate-400 capitalize">{profileRole}</p>
                         </div>
                     </div>
                     <button
@@ -265,7 +307,7 @@ const Layout = ({ children }) => {
                     </div>
                     {role === 'partner' && (
                         <div className="mt-4">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Partner</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Partner</p>
                             {loading ? (
                                 <div className="h-5 w-36 bg-slate-800 rounded animate-pulse" />
                             ) : (
@@ -282,7 +324,7 @@ const Layout = ({ children }) => {
                         if (!groups.length) {
                             return (
                                 <div className="space-y-1.5">
-                                    <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Menu</p>
+                                    <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Menu</p>
                                     {items.map((item, idx) => (
                                         <SidebarItem key={idx} {...item} active={location.pathname === item.to || location.pathname.startsWith(item.to + '/')} />
                                     ))}
@@ -291,7 +333,7 @@ const Layout = ({ children }) => {
                         }
                         return groups.map(group => (
                             <div key={group} className="mb-5">
-                                <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] mb-2">{group}</p>
+                                <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">{group}</p>
                                 <div className="space-y-1">
                                     {items.filter(i => i.group === group).map((item, idx) => (
                                         <SidebarItem key={idx} {...item} active={location.pathname === item.to || location.pathname.startsWith(item.to + '/')} />
@@ -304,12 +346,12 @@ const Layout = ({ children }) => {
 
                 <div className="p-4 border-t border-slate-800 bg-slate-900/50">
                     <div className="flex items-center gap-3 mb-4 px-4 p-3 bg-slate-800 rounded-2xl border border-slate-700/50">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-red-600 flex items-center justify-center text-white font-bold shadow-md">
-                            {user?.name?.[0] || 'U'}
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-red-600 flex items-center justify-center text-white font-bold shadow-md shrink-0">
+                            {(profileName?.[0] || '?').toUpperCase()}
                         </div>
                         <div className="overflow-hidden">
-                            <p className="text-sm font-bold text-white truncate">{user?.name}</p>
-                            <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
+                            <p className="text-sm font-bold text-white truncate">{profileName}</p>
+                            <p className="text-xs text-slate-400 capitalize">{profileRole}</p>
                         </div>
                     </div>
                     <button
@@ -324,7 +366,6 @@ const Layout = ({ children }) => {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
-                <div className="absolute top-0 left-0 w-full h-64 bg-slate-100 z-0"></div>
 
                 <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 p-4 md:px-8 flex justify-between items-center z-30 sticky top-0">
                     <div className="flex items-center gap-3 md:hidden">
@@ -342,7 +383,7 @@ const Layout = ({ children }) => {
                         </div>
                     </div>
                     <div className="hidden md:block">
-                        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest">{location.pathname.split('/').pop().replace('-', ' ')}</h2>
+                        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">{pageTitle}</h2>
                     </div>
 
                     <div className="flex items-center gap-3">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, MessageSquare, Clock, Check, Trash2, AlertTriangle, FileText, Package, Inbox } from 'lucide-react';
+import { Bell, MessageSquare, Clock, Check, Trash2, AlertTriangle, FileText, Package, Inbox, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { fetchCustomerInquiries, fetchCustomerQuotations } from '../api/customerPortal';
@@ -44,6 +44,9 @@ const deriveNotificationDisplay = (n, fallbackTitle) => {
     }
     if (n.type === 'customer_inquiry_referred') {
         return { title: n.title || 'Customer Request Referred', type: n.type };
+    }
+    if (n.type === 'team_access_request') {
+        return { title: n.title || 'New Access Request', type: n.type };
     }
     // Only real chat notifications (type 'message') open the chat box. Anything else that
     // belongs to an inquiry opens that inquiry (see inquiryPathFor) instead.
@@ -607,6 +610,11 @@ const NotificationBell = ({ onOpenChat }) => {
             setIsOpen(false);
             return;
         }
+        if (notification.type === 'team_access_request') {
+            navigate('/admin/access-requests');
+            setIsOpen(false);
+            return;
+        }
         // Every other inquiry notification (new General Inquiry / customer request,
         // assignments, renewals, quotations, pickups, …) opens that inquiry on the
         // viewer's own inquiry page.
@@ -627,14 +635,15 @@ const NotificationBell = ({ onOpenChat }) => {
     };
 
     const iconFor = (n) => {
-        if (n.type === 'expiry') return <AlertTriangle size={18} className="text-amber-600" />;
+        if (n.type === 'expiry') return <AlertTriangle size={18} className="text-amber-700" />;
         if (n.type === 'quotation') return <FileText size={18} className="text-emerald-600" />;
         if (n.type === 'partial_accept') return <Package size={18} className="text-purple-600" />;
         if (n.type === 'product_assigned') return <Package size={18} className="text-teal-600" />;
         if (n.type === 'message') return <MessageSquare size={18} className="text-blue-600" />;
-        if (n.type === 'agent_complaint') return <MessageSquare size={18} className="text-orange-600" />;
-        if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') return <Inbox size={18} className="text-amber-600" />;
-        return <Clock size={18} className="text-amber-600" />;
+        if (n.type === 'agent_complaint') return <MessageSquare size={18} className="text-orange-700" />;
+        if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') return <Inbox size={18} className="text-amber-700" />;
+        if (n.type === 'team_access_request') return <KeyRound size={18} className="text-indigo-600" />;
+        return <Clock size={18} className="text-amber-700" />;
     };
 
     const bubbleClass = (n) => {
@@ -643,8 +652,9 @@ const NotificationBell = ({ onOpenChat }) => {
         if (n.type === 'partial_accept') return 'bg-purple-100 text-purple-700';
         if (n.type === 'product_assigned') return 'bg-teal-100 text-teal-700';
         if (n.type === 'message') return 'bg-blue-100 text-blue-600';
-        if (n.type === 'agent_complaint') return 'bg-orange-100 text-orange-600';
+        if (n.type === 'agent_complaint') return 'bg-orange-100 text-orange-700';
         if (n.type === 'general_inquiry' || n.type === 'general_inquiry_assigned') return 'bg-amber-100 text-amber-700';
+        if (n.type === 'team_access_request') return 'bg-indigo-100 text-indigo-700';
         return 'bg-slate-100 text-slate-600';
     };
 

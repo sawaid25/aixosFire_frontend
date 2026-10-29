@@ -69,6 +69,22 @@ import PartnerCategoryProducts from './pages/partner/PartnerCategoryProducts';
 import PartnerProductDetail from './pages/partner/PartnerProductDetail';
 import ManageServices from './pages/partner/ManageServices';
 
+// Admin — Internal Team access
+import AccessRequests from './pages/admin/AccessRequests';
+
+// Internal Team Pages
+import InternalTeamDashboard from './pages/team/Dashboard';
+import InternalTeamAgents from './pages/team/Agents';
+import InternalTeamAgentDetail from './pages/team/AgentDetail';
+import InternalTeamCustomers from './pages/team/Customers';
+import InternalTeamCustomerDetail from './pages/team/CustomerDetail';
+import InternalTeamPartners from './pages/team/Partners';
+import InternalTeamInquiries from './pages/team/Inquiries';
+import InternalTeamInquiryDetail from './pages/team/InquiryDetail';
+import InternalTeamComplaints from './pages/team/Complaints';
+import InternalTeamAccessDenied from './pages/team/AccessDenied';
+import { hasTeamPermission } from './constants/teamPermissions';
+
 
 
 // Placeholder Pages (Temporary)
@@ -88,6 +104,13 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   return <Layout>{children}</Layout>;
+};
+
+// Internal Team page gate — a typed-in URL for a page Admin didn't grant shows Access
+// Denied. This is UX only; the backend refuses the page's data either way.
+const TeamPage = ({ module, children }) => {
+  const { user } = useAuth();
+  return hasTeamPermission(user, module) ? children : <InternalTeamAccessDenied />;
 };
 
 function App() {
@@ -167,6 +190,7 @@ function App() {
                   <Route path="inquiries/:id" element={<InquiryDetail />} />
                   <Route path="inquiries/:id/items/:itemId" element={<InquiryItemDetail />} />
                   <Route path="quotations" element={<QuotationAnalytics />} />
+                  <Route path="access-requests" element={<AccessRequests />} />
                 </Routes>
               </ProtectedRoute>
             } />
@@ -186,6 +210,28 @@ function App() {
                   <Route path="inquiry/:id/item/:itemId/site-assessment" element={<SiteAssessmentFormPage />} />
                   <Route path="inquiry/:id/item/:itemId" element={<InquiryItemDetailPage />} />
                   <Route path="inquiry/:id" element={<InquiryItemsList />} />
+                </Routes>
+              </ProtectedRoute>
+            } />
+
+            {/* Internal Team Routes — each page needs its module permission */}
+            <Route path="/team/*" element={
+              <ProtectedRoute allowedRoles={['internal_team']}>
+                <Routes>
+                  <Route path="dashboard" element={<InternalTeamDashboard />} />
+                  <Route path="agents" element={<TeamPage module="agents"><InternalTeamAgents /></TeamPage>} />
+                  <Route path="agents/:id" element={<TeamPage module="agents"><InternalTeamAgentDetail /></TeamPage>} />
+                  <Route path="customers" element={<TeamPage module="customers"><InternalTeamCustomers /></TeamPage>} />
+                  <Route path="customers/:id" element={<TeamPage module="customers"><InternalTeamCustomerDetail /></TeamPage>} />
+                  <Route path="partners" element={<TeamPage module="partners"><InternalTeamPartners /></TeamPage>} />
+                  {/* Same catalog pages as Admin, read-only for team (see hooks/useCatalogPortal.js). */}
+                  <Route path="products" element={<TeamPage module="products"><Products /></TeamPage>} />
+                  <Route path="products/:categoryId" element={<TeamPage module="products"><CategoryProducts /></TeamPage>} />
+                  <Route path="products/:categoryId/:productId" element={<TeamPage module="products"><AdminProductDetail /></TeamPage>} />
+                  <Route path="inquiries" element={<TeamPage module="inquiries"><InternalTeamInquiries /></TeamPage>} />
+                  <Route path="inquiries/:id" element={<TeamPage module="inquiries"><InternalTeamInquiryDetail /></TeamPage>} />
+                  <Route path="complaints" element={<TeamPage module="complaints"><InternalTeamComplaints /></TeamPage>} />
+                  <Route path="*" element={<Navigate to="/team/dashboard" replace />} />
                 </Routes>
               </ProtectedRoute>
             } />
